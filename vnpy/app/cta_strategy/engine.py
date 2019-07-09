@@ -580,7 +580,6 @@ class CtaEngine(BaseEngine):
         if strategy_name in self.strategies:
             self.write_log(f"创建策略失败，存在重名{strategy_name}")
             return
-
         strategy_class = self.classes.get(class_name, None)
         if not strategy_class:
             self.write_log(f"创建策略失败，找不到策略类{class_name}")

@@ -151,7 +151,7 @@ class WebsocketClient(object):
         """
         with self._ws_lock:
             if self._ws:
-                self._ws.close()
+                self._ws.abort()
                 self._ws = None
 
     def _run(self):
