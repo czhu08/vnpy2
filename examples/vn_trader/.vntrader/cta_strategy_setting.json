@@ -6,10 +6,10 @@
             "class_name": "GridTradeStrategy",
             "quote": "usdt",
             "min_diff": 0.01,
-            "input_ss": 1,
+            "input_ss": 0.1,
             "grid_up_line": 150,
-            "grid_mid_line": 130,
-            "grid_dn_line": 120,
+            "grid_mid_line": 120,
+            "grid_dn_line": 100,
             "grid_height": 4
         }
     }

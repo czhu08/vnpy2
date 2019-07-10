@@ -84,6 +84,7 @@ class GridTradeStrategy(CtaTemplate):
 
             ref = self.buy(price=price, volume=self.input_ss)
             if ref is not None and len(ref) > 0:
+                self.entrust = 1
                 self.write_log(u'开多委托单号{},委托买入价：{}'.format(ref, price))
             else:
                 self.write_log(u'开多委托单失败:{0},v:{1}'.format(price, self.input_ss))
@@ -95,6 +96,7 @@ class GridTradeStrategy(CtaTemplate):
                 return
             ref = self.sell(price=price, volume=sell_volume)
             if ref is not None and len(ref) > 0:
+                self.entrust = -1
                 self.write_log(u'委托卖出成功, 委托编号:{},委托价格:{}卖出数量{}'.format(ref, price, sell_volume))
             else:
                 self.write_log(u'委托卖出{}失败,价格:{},数量:{}'.format(self.vt_symbol, price, sell_volume))
@@ -116,6 +118,7 @@ class GridTradeStrategy(CtaTemplate):
             self.entrust = 0
         elif order.status in [Status.CANCELLED,Status.REJECTED]:
             self.entrust = 0
+        self.put_event()
 
     def on_trade(self, trade: TradeData):
         """
