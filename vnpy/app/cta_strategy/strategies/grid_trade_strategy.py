@@ -62,22 +62,22 @@ class GridTradeStrategy(CtaTemplate):
         if not self.inited or not self.trading:
             return
 
-        # 更新持仓
-        base_pos = self.cta_engine.offset_converter.get_position_holding(self.vt_symbol)
-        account = self.cta_engine.main_engine.get_account('.'.join([tick.exchange.value, self.quote]))
-
-        if base_pos is None or account is None:
-            self.write_log(u'获取不到持仓')
-            return
-
         if tick.last_price > self.grid_up_line or tick.last_price < self.grid_dn_line or self.entrust != 0:
-            self.write_log("price out grid")
+        #    self.write_log("price out grid")
             return
+
+        # 更新持仓
+
+        #if base_pos is None or account is None:
+        #    self.write_log(u'获取不到持仓')
+        #    return
 
         price = tick.ask_price_1
 
         if price < (self.base_line / (1 + self.grid_height / 100)):
             # 买入
+            account = self.cta_engine.main_engine.get_account('.'.join([tick.exchange.value, self.quote]))
+
             buy_volume = min(account.balance/price, float(self.input_ss))
             if buy_volume < self.min_diff:
                 return
@@ -91,6 +91,8 @@ class GridTradeStrategy(CtaTemplate):
 
         elif price > (self.base_line * (1 + self.grid_height / 100)):
             # 卖出
+            base_pos = self.cta_engine.offset_converter.get_position_holding(self.vt_symbol)
+
             sell_volume = min(base_pos.long_pos - base_pos.long_pos_frozen, float(self.input_ss))
             if sell_volume < self.min_diff:
                 return
