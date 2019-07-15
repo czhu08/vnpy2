@@ -12,15 +12,18 @@ class GridTradeStrategy(CtaTemplate):
 
     author = "jasion"
 
+    # this is LTC example
     min_diff = 0.01
-    input_ss = 1
+    input_ss = 0.1
     grid_up_line = 150
     grid_mid_line = 130
     grid_dn_line = 120
     grid_height = 4
-    quote = ""
+    quote = "usdt"
 
     base_line = 0
+    new_up = 0
+    new_down = 0
     entrust = 0
 
     parameters = ["quote", "min_diff", "input_ss", "grid_up_line",
@@ -35,6 +38,8 @@ class GridTradeStrategy(CtaTemplate):
 
         if self.base_line == 0:
             self.base_line = self.grid_mid_line
+            self.new_up = self.base_line * (1 + self.grid_height / 100)
+            self.new_down = self.base_line / (1 + self.grid_height / 100)
 
     def on_init(self):
         """
@@ -56,7 +61,7 @@ class GridTradeStrategy(CtaTemplate):
 
     def on_tick(self, tick: TickData):
         """
-        Callback of new tick data update.
+        Callback of new tick data update. run once one second
         """
         # 首先检查是否是实盘运行还是数据预处理阶段
         if not self.inited or not self.trading:
@@ -72,12 +77,12 @@ class GridTradeStrategy(CtaTemplate):
         #    self.write_log(u'获取不到持仓')
         #    return
 
-        price = tick.ask_price_1
+        price= tick.last_price
 
-        if price < (self.base_line / (1 + self.grid_height / 100)):
+        if price <= self.new_down:
             # 买入
             account = self.cta_engine.main_engine.get_account('.'.join([tick.exchange.value, self.quote]))
-
+            price = tick.ask_price_1  #卖一价
             buy_volume = min(account.balance/price, float(self.input_ss))
             if buy_volume < self.min_diff:
                 return
@@ -89,10 +94,10 @@ class GridTradeStrategy(CtaTemplate):
             else:
                 self.write_log(u'开多委托单失败:{0},v:{1}'.format(price, self.input_ss))
 
-        elif price > (self.base_line * (1 + self.grid_height / 100)):
+        elif price >= self.new_up:
             # 卖出
             base_pos = self.cta_engine.offset_converter.get_position_holding(self.vt_symbol)
-
+            price = tick.bid_price_1  #买一价
             sell_volume = min(base_pos.long_pos - base_pos.long_pos_frozen, float(self.input_ss))
             if sell_volume < self.min_diff:
                 return
@@ -117,6 +122,8 @@ class GridTradeStrategy(CtaTemplate):
         if order.volume == order.traded or order.status == Status.ALLTRADED:
             # 开仓，平仓委托单全部成交
             self.base_line = order.price
+            self.new_up = self.base_line * (1 + self.grid_height / 100)
+            self.new_down = self.base_line / (1 + self.grid_height / 100)
             self.entrust = 0
         elif order.status in [Status.CANCELLED,Status.REJECTED]:
             self.entrust = 0
