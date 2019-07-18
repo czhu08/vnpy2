@@ -25,6 +25,7 @@ class GridTradeStrategy(CtaTemplate):
     new_up = 0
     new_down = 0
     entrust = 0
+    base = ""
 
     parameters = ["quote", "min_diff", "input_ss", "grid_up_line",
                   "grid_mid_line", "grid_dn_line", "grid_height"]
@@ -40,6 +41,9 @@ class GridTradeStrategy(CtaTemplate):
             self.base_line = self.grid_mid_line
             self.new_up = self.base_line * (1 + self.grid_height / 100)
             self.new_down = self.base_line / (1 + self.grid_height / 100)
+
+        dict = self.vt_symbol.partition(self.quote)
+        self.base = dict[0]
 
     def on_init(self):
         """
@@ -96,9 +100,9 @@ class GridTradeStrategy(CtaTemplate):
 
         elif price >= self.new_up:
             # 卖出
-            base_pos = self.cta_engine.offset_converter.get_position_holding(self.vt_symbol)
+            base_pos = self.cta_engine.main_engine.get_account('.'.join([tick.exchange.value, self.base]))
             price = tick.bid_price_1  #买一价
-            sell_volume = min(base_pos.long_pos - base_pos.long_pos_frozen, float(self.input_ss))
+            sell_volume = min(base_pos.balance, float(self.input_ss))
             if sell_volume < self.min_diff:
                 return
             ref = self.sell(price=price, volume=sell_volume)
