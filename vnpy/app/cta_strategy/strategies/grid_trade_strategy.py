@@ -79,7 +79,20 @@ class GridTradeStrategy(CtaTemplate):
         #    self.write_log("price out grid")
             return
 
-        # 更新持仓
+        # 下限清仓
+        if tick.last_price <= self.grid_dn_line + self.min_diff:
+            base_pos = self.cta_engine.main_engine.get_account('.'.join([tick.exchange.value, self.base]))
+            sell_volume = base_pos.balance
+            if sell_volume >= self.min_diff:
+                price = tick.bid_price_1  # 买一价
+                ref = self.sell(price=price, volume=sell_volume)
+                if ref is not None and len(ref) > 0:
+                    self.entrust = -1
+                    self.write_log(u'清仓委托卖出成功, 委托编号:{},委托价格:{}卖出数量{}'.format(ref, price, sell_volume))
+                    sendWxMsg(u'清仓委托卖出成功' ,u'委托编号:{},委托价格:{}卖出数量{}'.format(ref, price, sell_volume) )
+                else:
+                    self.write_log(u'清仓委托卖出{}失败,价格:{},数量:{}'.format(self.vt_symbol, price, sell_volume))
+
 
         #if base_pos is None or account is None:
         #    self.write_log(u'获取不到持仓')
@@ -100,7 +113,7 @@ class GridTradeStrategy(CtaTemplate):
                 self.entrust = 1
                 self.write_log(u'开多委托单号{},委托买入价：{}'.format(ref, price))
             else:
-                self.write_log(u'开多委托单失败:{0},v:{1}'.format(price, self.input_ss))
+                self.write_log(u'开多委托单失败:价格:{},数量:{}'.format(price, self.input_ss))
 
         elif price >= self.new_up:
             # 卖出
@@ -125,7 +138,7 @@ class GridTradeStrategy(CtaTemplate):
                                  order.direction, order.price,
                                  order.volume,order.traded,
                                  order.status)
-        sub = u'{},{}'.format(order.direction, order.price)
+        sub = u'{}, {}'.format(order.direction, order.price)
 
         self.write_log(msg)
 
