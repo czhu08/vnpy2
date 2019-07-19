@@ -5,8 +5,12 @@ from vnpy.app.cta_strategy import (
     OrderData,
 )
 from vnpy.trader.constant import Status
+from vnpy.trader.util_wx_ft import sendWxMsg
 
-#币币交易区间网格策略
+"""
+币币交易区间网格策略
+上涨height就平，下跌height就开，高抛低吸
+"""
 class GridTradeStrategy(CtaTemplate):
     """"""
 
@@ -117,10 +121,12 @@ class GridTradeStrategy(CtaTemplate):
         """
         Callback of new order data update.
         """
-        msg = u'报单更新，委托编号:{},合约:{},方向:{},价格:{}委托数量:{},成交:{},状态:{}'.format(order.orderid, order.symbol,
+        msg = u'报单更新,委托编号:{},合约:{},方向:{},价格:{},委托数量:{},成交:{},状态:{}'.format(order.orderid, order.symbol,
                                  order.direction, order.price,
                                  order.volume,order.traded,
                                  order.status)
+        sub = u'{},{}'.format(order.direction, order.price)
+
         self.write_log(msg)
 
         if order.volume == order.traded or order.status == Status.ALLTRADED:
@@ -129,7 +135,8 @@ class GridTradeStrategy(CtaTemplate):
             self.new_up = self.base_line * (1 + self.grid_height / 100)
             self.new_down = self.base_line / (1 + self.grid_height / 100)
             self.entrust = 0
-            self.send_email(msg)
+            #self.send_email(msg)
+            sendWxMsg(sub, msg)
         elif order.status in [Status.CANCELLED,Status.REJECTED]:
             self.entrust = 0
         self.put_event()
