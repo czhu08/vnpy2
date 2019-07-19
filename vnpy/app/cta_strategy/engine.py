@@ -53,6 +53,7 @@ from .base import (
 from .template import CtaTemplate
 from .converter import OffsetConverter
 
+from vnpy.trader.setting import SETTINGS
 
 STOP_STATUS_MAP = {
     Status.SUBMITTING: StopOrderStatus.WAITING,
@@ -898,4 +899,8 @@ class CtaEngine(BaseEngine):
         else:
             subject = "CTA策略引擎"
 
-        self.main_engine.send_email(subject, msg)
+        if SETTINGS["email.server"] == "wechat":
+            from vnpy.trader.util_wx_ft import sendWxMsg
+            sendWxMsg(text=subject, desp=msg)
+        else:
+            self.main_engine.send_email(subject, msg)

@@ -6,7 +6,7 @@ from vnpy.app.cta_strategy import (
 )
 from vnpy.trader.constant import Status
 
-
+#币币交易区间网格策略
 class GridTradeStrategy(CtaTemplate):
     """"""
 
@@ -42,7 +42,7 @@ class GridTradeStrategy(CtaTemplate):
             self.new_up = self.base_line * (1 + self.grid_height / 100)
             self.new_down = self.base_line / (1 + self.grid_height / 100)
 
-        dict = self.vt_symbol.partition(self.quote)
+        dict = self.vt_symbol.partition(self.quote)  #vt_symbol = ltcusdt.HUOBI
         self.base = dict[0]
 
     def on_init(self):
@@ -117,11 +117,11 @@ class GridTradeStrategy(CtaTemplate):
         """
         Callback of new order data update.
         """
-        self.write_log(u'报单更新，委托编号:{},合约:{},方向:{},价格:{}委托数量:{},成交:{},状态:{}'
-                         .format(order.orderid, order.symbol,
+        msg = u'报单更新，委托编号:{},合约:{},方向:{},价格:{}委托数量:{},成交:{},状态:{}'.format(order.orderid, order.symbol,
                                  order.direction, order.price,
                                  order.volume,order.traded,
-                                 order.status))
+                                 order.status)
+        self.write_log(msg)
 
         if order.volume == order.traded or order.status == Status.ALLTRADED:
             # 开仓，平仓委托单全部成交
@@ -129,6 +129,7 @@ class GridTradeStrategy(CtaTemplate):
             self.new_up = self.base_line * (1 + self.grid_height / 100)
             self.new_down = self.base_line / (1 + self.grid_height / 100)
             self.entrust = 0
+            self.send_email(msg)
         elif order.status in [Status.CANCELLED,Status.REJECTED]:
             self.entrust = 0
         self.put_event()
