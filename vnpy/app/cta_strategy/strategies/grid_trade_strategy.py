@@ -51,7 +51,7 @@ class GridTradeStrategy(CtaTemplate):
         self.base = dict[0]         #ltc
 
         self.rate = 0.002           # huobi rate
-        if dict[3] == '.BINANCE':
+        if dict[2] == '.BINANCE':
             self.rate = 0.001
 
         self.min_diff = 0.01        # LTC,BTC
