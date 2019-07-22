@@ -24,9 +24,9 @@ class GridTradeStrategy(CtaTemplate):
     # parameter from setting,json
     quote = "usdt"
     input_ss = 0.1
-    grid_up_line = 120
-    grid_mid_line = 100
-    grid_dn_line = 90
+    grid_up_line = 120.0
+    grid_mid_line = 100.0
+    grid_dn_line = 90.0
     grid_height = 4
 
     # variable in data.json
@@ -99,15 +99,15 @@ class GridTradeStrategy(CtaTemplate):
 
         if tick.last_price > self.grid_up_line or tick.last_price < self.grid_dn_line:
             if (self.__singleton1):
-                sendWxMsg(u'价格超出区间')
+                sendWxMsg(u'价格超出区间',u'价格:{}'.format(tick.last_price))
                 self.__singleton1 = False
             return
 
+        ref = ""
         if self.entrust != 0:
             if (self.__singleton2):
-                sendWxMsg(u'委托单未全部成交')
+                sendWxMsg(u'委托单未全部成交',u'单号:{}'.format(ref))
                 self.__singleton2 = False
-            time.sleep(60*1)
             return
 
         # 下限清仓
@@ -178,15 +178,15 @@ class GridTradeStrategy(CtaTemplate):
             if order.direction == Direction.LONG:
                 self.buy_times = self.buy_times + 1
                 if self.buy_times <= self.sell_times:
-                    self.roi = self.roi + (self.base_line - order.price - order.price * self.rate) * order.volume
+                    self.roi = self.roi + (self.base_line - order.price - order.price * self.rate) * order.traded
                 else:
-                    self.roi = self.roi - order.price * order.volume * self.rate
+                    self.roi = self.roi - order.price * order.traded * self.rate
             else:
                 self.sell_times = self.sell_times + 1
                 if self.sell_times <= self.buy_times:
-                    self.roi = self.roi + (order.price - self.base_line  - order.price * self.rate) * order.volume
+                    self.roi = self.roi + (order.price - self.base_line  - order.price * self.rate) * order.traded
                 else:
-                    self.roi = self.roi - order.price * order.volume * self.rate
+                    self.roi = self.roi - order.price * order.traded * self.rate
 
             self.base_line = order.price
             self.new_up = self.base_line * (1 + self.grid_height / 100)
