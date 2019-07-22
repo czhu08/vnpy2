@@ -22,13 +22,12 @@ class GridTradeStrategy(CtaTemplate):
 
     # this is LTC example
     # parameter from setting,json
-    min_diff = 0.01 #LTC,BTC
+    quote = "usdt"
     input_ss = 0.1
     grid_up_line = 120
     grid_mid_line = 100
     grid_dn_line = 90
     grid_height = 4
-    quote = "usdt"
 
     # variable in data.json
     base_line = 0
@@ -36,17 +35,8 @@ class GridTradeStrategy(CtaTemplate):
     sell_times = 0
     roi = 0.0
 
-    new_up = 0
-    new_down = 0
-    entrust = 0
-    base = ""
-
-    min_volumn = 0.001      # 0.0001BTC, 0.001LTC
-    rate = 0.002            # huobi rate
-
-    parameters = ["quote", "min_diff", "input_ss", "grid_up_line",
-                  "grid_mid_line", "grid_dn_line", "grid_height"]
-    variables = ["base_line","buy_times","sell_times","roi"]
+    parameters = ["quote", "input_ss", "grid_up_line", "grid_mid_line", "grid_dn_line", "grid_height"]
+    variables = ["base_line", "buy_times", "sell_times", "roi"]
 
     def __init__(self, cta_engine, strategy_name, vt_symbol, setting):
         """"""
@@ -58,7 +48,19 @@ class GridTradeStrategy(CtaTemplate):
             self.base_line = self.grid_mid_line
 
         dict = self.vt_symbol.partition(self.quote)  #vt_symbol = ltcusdt.HUOBI
-        self.base = dict[0]   #ltc
+        self.base = dict[0]         #ltc
+
+        self.rate = 0.002           # huobi rate
+        if dict[3] == '.BINANCE':
+            self.rate = 0.001
+
+        self.min_diff = 0.01        # LTC,BTC
+        self.min_volumn = 0.001     # 0.001ETH, 0.001LTC
+        if self.base == 'btc':
+            self.min_volumn = 0.0001
+        elif self.base == 'ht':
+            self.min_diff = 0.0001
+            self.min_volumn = 0.1
 
     def on_init(self):
         """
@@ -74,6 +76,7 @@ class GridTradeStrategy(CtaTemplate):
         self.new_down = self.base_line / (1 + self.grid_height / 100)
         self.new_down = round_to(self.new_down, self.min_diff)
 
+        self.entrust = 0
         self.__singleton1 = True
         self.__singleton2 = True
 
