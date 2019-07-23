@@ -4,6 +4,8 @@ General utility functions.
 
 import json
 from pathlib import Path
+
+import decimal
 from typing import Callable
 
 import numpy as np
@@ -111,6 +113,15 @@ def round_to(value: float, target: float):
     Round price to price tick value.
     """
     rounded = int(round(value / target)) * target
+
+    # 数字货币，对浮点的长度有要求，需要砍除多余
+    if isinstance(target,float):
+        price_exponent = decimal.Decimal(str(rounded))
+        tick_exponent = decimal.Decimal(str(target))
+        if abs(price_exponent.as_tuple().exponent) > abs(tick_exponent.as_tuple().exponent):
+            rounded = round(rounded, ndigits=abs(tick_exponent.as_tuple().exponent))
+            rounded = float(str(rounded))
+
     return rounded
 
 
