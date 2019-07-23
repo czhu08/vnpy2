@@ -44,9 +44,6 @@ class GridTradeStrategy(CtaTemplate):
             cta_engine, strategy_name, vt_symbol, setting
         )
 
-        if self.base_line == 0:
-            self.base_line = self.grid_mid_line
-
         dict = self.vt_symbol.partition(self.quote)  #vt_symbol = ltcusdt.HUOBI
         self.base = dict[0]         #ltc
 
@@ -66,6 +63,8 @@ class GridTradeStrategy(CtaTemplate):
         """
         Callback when strategy is inited.
         """
+        if self.base_line == 0:
+            self.base_line = self.grid_mid_line
         self.write_log("策略初始化")
 
     def on_start(self):
@@ -88,7 +87,6 @@ class GridTradeStrategy(CtaTemplate):
         """
         self.write_log("策略停止")
 
-
     def on_tick(self, tick: TickData):
         """
         Callback of new tick data update. run once one second
@@ -101,30 +99,30 @@ class GridTradeStrategy(CtaTemplate):
             if (self.__singleton1):
                 sendWxMsg(u'价格超出区间',u'价格:{}'.format(tick.last_price))
                 self.__singleton1 = False
+
+                # 下限清仓
+                if tick.last_price < self.grid_dn_line:
+                    base_pos = self.cta_engine.main_engine.get_account('.'.join([tick.exchange.value, self.base]))
+                    sell_volume = base_pos.balance
+                    sell_volume = round_to(sell_volume, self.min_volumn)
+                    if sell_volume >= self.min_volumn:
+                        price = tick.bid_price_1  # 买一价
+                        price = round_to(price, self.min_diff)
+                        ref = self.sell(price=price, volume=sell_volume)
+                        if ref is not None and len(ref) > 0:
+                            self.entrust = -1
+                            self.write_log(u'清仓委托卖出成功, 委托编号:{},委托价格:{},卖出数量{}'.format(ref, price, sell_volume))
+                            sendWxMsg(u'清仓委托卖出成功', u'委托编号:{},委托价格:{},卖出数量{}'.format(ref, price, sell_volume))
+                        else:
+                            self.write_log(u'清仓委托卖出{}失败,价格:{},数量:{}'.format(self.vt_symbol, price, sell_volume))
             return
 
         ref = ""
         if self.entrust != 0:
-            if (self.__singleton2):
-                sendWxMsg(u'委托单未全部成交',u'单号:{}'.format(ref))
-                self.__singleton2 = False
+            # if (self.__singleton2):
+            #     sendWxMsg(u'委托单未全部成交',u'单号:{}'.format(ref))
+            #     self.__singleton2 = False
             return
-
-        # 下限清仓
-        if tick.last_price <= self.grid_dn_line + self.min_diff:
-            base_pos = self.cta_engine.main_engine.get_account('.'.join([tick.exchange.value, self.base]))
-            sell_volume = base_pos.balance
-            sell_volume = round_to(sell_volume, self.min_volumn)
-            if sell_volume >= self.min_volumn:
-                price = tick.bid_price_1  # 买一价
-                price= round_to(price, self.min_diff)
-                ref = self.sell(price=price, volume=sell_volume)
-                if ref is not None and len(ref) > 0:
-                    self.entrust = -1
-                    self.write_log(u'清仓委托卖出成功, 委托编号:{},委托价格:{},卖出数量{}'.format(ref, price, sell_volume))
-                    sendWxMsg(u'清仓委托卖出成功' ,u'委托编号:{},委托价格:{},卖出数量{}'.format(ref, price, sell_volume) )
-                else:
-                    self.write_log(u'清仓委托卖出{}失败,价格:{},数量:{}'.format(self.vt_symbol, price, sell_volume))
 
         price= tick.last_price
 
@@ -161,13 +159,12 @@ class GridTradeStrategy(CtaTemplate):
             else:
                 self.write_log(u'委托卖出{}失败,价格:{},数量:{}'.format(self.vt_symbol, price, sell_volume))
 
-
     def on_order(self, order: OrderData):
         """
         Callback of new order data update.
         """
         msg = u'报单更新,委托编号:{},合约:{},方向:{},价格:{},委托:{},成交:{},状态:{}'.format(order.orderid, order.symbol,
-                                 order.direction, order.price,
+                                 order.direction.value, order.price,
                                  order.volume,order.traded,
                                  order.status)
         self.write_log(msg)
@@ -177,16 +174,10 @@ class GridTradeStrategy(CtaTemplate):
             # 计算收益
             if order.direction == Direction.LONG:
                 self.buy_times = self.buy_times + 1
-                if self.buy_times <= self.sell_times:
-                    self.roi = self.roi + (self.base_line - order.price - order.price * self.rate) * order.traded
-                else:
-                    self.roi = self.roi - order.price * order.traded * self.rate
+                self.roi = self.roi - order.price * order.traded * self.rate
             else:
                 self.sell_times = self.sell_times + 1
-                if self.sell_times <= self.buy_times:
-                    self.roi = self.roi + (order.price - self.base_line  - order.price * self.rate) * order.traded
-                else:
-                    self.roi = self.roi - order.price * order.traded * self.rate
+                self.roi = self.roi + (order.price - self.base_line  - order.price * self.rate) * order.traded
 
             self.base_line = order.price
             self.new_up = self.base_line * (1 + self.grid_height / 100)
@@ -194,8 +185,8 @@ class GridTradeStrategy(CtaTemplate):
             self.new_down = round_to(self.new_down, self.min_diff)
             self.entrust = 0
 
-            sub = u'{}, {}'.format(order.direction, order.price)
-            self.roi = round_to(self.roi, 0.0001)
+            sub = self.strategy_name + ' ' + order.direction.value + u' {}'.format(order.price)
+            self.roi = round(self.roi, 4)
             msg2 = u'{},\n低吸次数:{},高抛次数:{},套利:{} {}'.format(msg, self.buy_times, self.sell_times, self.roi,self.quote)
             self.send_email(msg2)
             sendWxMsg(sub, msg2)
