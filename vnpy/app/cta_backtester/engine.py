@@ -5,6 +5,7 @@ from datetime import datetime
 from threading import Thread
 from pathlib import Path
 
+from vnpy.app.cta_strategy.base import BacktestingMode
 from vnpy.event import Event, EventEngine
 from vnpy.trader.engine import BaseEngine, MainEngine
 from vnpy.trader.constant import Interval
@@ -57,7 +58,7 @@ class BacktesterEngine(BaseEngine):
 
         self.write_log("策略文件加载完成")
 
-        self.init_rqdata()
+        # self.init_rqdata()
 
     def init_rqdata(self):
         """
@@ -77,13 +78,13 @@ class BacktesterEngine(BaseEngine):
         """
         Load strategy class from source code.
         """
+        path2 = Path.cwd().parent.joinpath("strategies")
+        self.load_strategy_class_from_folder(path2, "examples.strategies")
+
         app_path = Path(__file__).parent.parent
         path1 = app_path.joinpath("cta_strategy", "strategies")
         self.load_strategy_class_from_folder(
             path1, "vnpy.app.cta_strategy.strategies")
-
-        path2 = Path.cwd().joinpath("strategies")
-        self.load_strategy_class_from_folder(path2, "strategies")
 
     def load_strategy_class_from_folder(self, path: Path, module_name: str = ""):
         """
@@ -127,6 +128,7 @@ class BacktesterEngine(BaseEngine):
         size: int,
         pricetick: float,
         capital: int,
+        mode: str,
         setting: dict
     ):
         """"""
@@ -135,6 +137,10 @@ class BacktesterEngine(BaseEngine):
 
         engine = self.backtesting_engine
         engine.clear_data()
+
+        bt_mode = BacktestingMode.BAR
+        if mode == "TICK":
+            bt_mode = BacktestingMode.TICK
 
         engine.set_parameters(
             vt_symbol=vt_symbol,
@@ -145,7 +151,8 @@ class BacktesterEngine(BaseEngine):
             slippage=slippage,
             size=size,
             pricetick=pricetick,
-            capital=capital
+            capital=capital,
+            mode=bt_mode
         )
 
         strategy_class = self.classes[class_name]
@@ -178,6 +185,7 @@ class BacktesterEngine(BaseEngine):
         size: int,
         pricetick: float,
         capital: int,
+        mode: str,
         setting: dict
     ):
         if self.thread:
@@ -198,6 +206,7 @@ class BacktesterEngine(BaseEngine):
                 size,
                 pricetick,
                 capital,
+                mode,
                 setting
             )
         )

@@ -57,14 +57,15 @@ class BacktesterManager(QtWidgets.QWidget):
         self.class_combo = QtWidgets.QComboBox()
         self.class_combo.addItems(self.class_names)
 
-        self.symbol_line = QtWidgets.QLineEdit("IF88.CFFEX")
+        # self.symbol_line = QtWidgets.QLineEdit("IF88.CFFEX")
+        self.symbol_line = QtWidgets.QLineEdit("ltcusdt.HUOBI")
 
         self.interval_combo = QtWidgets.QComboBox()
         for inteval in Interval:
             self.interval_combo.addItem(inteval.value)
 
         end_dt = datetime.now()
-        start_dt = end_dt - timedelta(days=3 * 365)
+        start_dt = end_dt - timedelta(days=3 * 20)
 
         self.start_date_edit = QtWidgets.QDateEdit(
             QtCore.QDate(
@@ -77,11 +78,12 @@ class BacktesterManager(QtWidgets.QWidget):
             QtCore.QDate.currentDate()
         )
 
-        self.rate_line = QtWidgets.QLineEdit("0.000025")
-        self.slippage_line = QtWidgets.QLineEdit("0.2")
-        self.size_line = QtWidgets.QLineEdit("300")
-        self.pricetick_line = QtWidgets.QLineEdit("0.2")
+        self.rate_line = QtWidgets.QLineEdit("0.002")
+        self.slippage_line = QtWidgets.QLineEdit("0.01")
+        self.size_line = QtWidgets.QLineEdit("1")
+        self.pricetick_line = QtWidgets.QLineEdit("0.01")
         self.capital_line = QtWidgets.QLineEdit("1000000")
+        self.bt_mode = QtWidgets.QLineEdit("BAR")
 
         backtesting_button = QtWidgets.QPushButton("开始回测")
         backtesting_button.clicked.connect(self.start_backtesting)
@@ -130,6 +132,7 @@ class BacktesterManager(QtWidgets.QWidget):
         form.addRow("合约乘数", self.size_line)
         form.addRow("价格跳动", self.pricetick_line)
         form.addRow("回测资金", self.capital_line)
+        form.addRow("回测模式", self.bt_mode)
 
         left_vbox = QtWidgets.QVBoxLayout()
         left_vbox.addLayout(form)
@@ -236,6 +239,7 @@ class BacktesterManager(QtWidgets.QWidget):
         size = float(self.size_line.text())
         pricetick = float(self.pricetick_line.text())
         capital = float(self.capital_line.text())
+        mode = self.bt_mode.text()
 
         old_setting = self.settings[class_name]
         dialog = BacktestingSettingEditor(class_name, old_setting)
@@ -257,6 +261,7 @@ class BacktesterManager(QtWidgets.QWidget):
             size,
             pricetick,
             capital,
+            mode,
             new_setting
         )
 

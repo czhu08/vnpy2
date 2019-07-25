@@ -41,6 +41,8 @@ class TestStrategy(CtaTemplate):
         Callback when strategy is inited.
         """
         self.write_log("策略初始化")
+        self.load_tick(0)
+        self.load_bar(0)
 
     def on_start(self):
         """
