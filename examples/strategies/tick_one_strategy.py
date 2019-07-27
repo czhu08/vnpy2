@@ -1,7 +1,8 @@
-import numpy
+import numpy as np
 
 from datetime import datetime, time
 
+from examples.util.util_wx_ft import sendWxMsg
 from vnpy.app.cta_strategy import (
     CtaTemplate,
     TickData,
@@ -10,6 +11,7 @@ from vnpy.app.cta_strategy import (
     OrderData,
     StopOrder,
 )
+from vnpy.trader.constant import Status, Direction, Offset
 
 """
 入场： 每次读 Tick ，分析过去 10 个 tick 的的总计，如果买量大于卖量，开多单 ；反之空单
@@ -23,31 +25,34 @@ from vnpy.app.cta_strategy import (
 新增一个类全局变量级别的锁，当有 order 挂单或者没有 order 发出单没有返回信息时候，这个锁关闭，不再开新单；避免多个单同时阻塞。
 """
 
-# LTC190927.HUOBI
+
+#  LTC190802.HUOBI
+#  LTC190927.HUOBI
 ########################################################################
 class TickOneStrategy(CtaTemplate):
     """基于Tick的交易策略"""
 
-    author = u'BillyZhang'
+    author = u'czhu'
 
     # 策略参数
-    fixedSize = 1
-    Ticksize = 10
+    input_ss = 1
+    tickSize = 10
     initDays = 0
-    step = 0.5
+    step = 0.4
 
-    DAY_START = time(9, 00)  # 日盘启动和停止时间
-    DAY_END = time(17, 58)
-    NIGHT_START = time(20, 00)  # 夜盘启动和停止时间
-    NIGHT_END = time(22, 58)
+    DAY_START = time(0, 2)  # 日盘启动和停止时间
+    DAY_END = time(18, 58)
+    NIGHT_START = time(19, 00)  # 夜盘启动和停止时间
+    NIGHT_END = time(23, 58)
 
     # 策略变量
     posPrice = 0  # 持仓价格
+    poss = 0  #  持仓数量
 
     # 参数列表，保存了参数的名称
     parameters = ['initDays',
-                 'Ticksize',
-                 'fixedSize',
+                 'tickSize',
+                 'input_ss',
                   'step'
                  ]
 
@@ -55,7 +60,7 @@ class TickOneStrategy(CtaTemplate):
     # variables = ['inited', 'trading', 'pos', 'posPrice']
 
     # 同步列表，保存了需要保存到数据库的变量名称
-    variables = ['posPrice']
+    variables = ['poss','posPrice']
 
     # ----------------------------------------------------------------------
     def __init__(self, cta_engine, strategy_name, vt_symbol, setting):
@@ -65,12 +70,13 @@ class TickOneStrategy(CtaTemplate):
         )
 
         # 创建Array队列
-        self.tickArray = TickArrayManager(self.Ticksize)
+        self.tickArray = TickArrayManager(self.tickSize)
 
         self.entrust = 0
-
+        self.new_step = self.step * 1.5
+        
     # ----------------------------------------------------------------------
-    def on_minBarClose(self, bar):
+    def on_min_bar_close(self, bar):
         """"""
         # ----------------------------------------------------------------------
 
@@ -79,7 +85,7 @@ class TickOneStrategy(CtaTemplate):
         self.write_log(u'%s策略初始化' % self.strategy_name)
         # tick级别交易，不需要过往历史数据
 
-        self.load_tick(0)
+        #self.load_tick(0)
 
     # ----------------------------------------------------------------------
     def on_start(self):
@@ -111,78 +117,134 @@ class TickOneStrategy(CtaTemplate):
             TA.updateTick(tick)
             if not TA.inited:
                 return
-            if self.pos == 0:
-                # 如果空仓，分析过去10个对比，ask卖方多下空单，bid买方多下多单，并防止两个差价阻止单
+
+
+            if self.poss == 0:
+                # 如果空仓，分析过去10个对比，ask卖方多下空单，bid买方多下多单，并放两个差价阻止单
                 if TA.askBidVolumeDif() > 0:
-                    self.short(tick.last_price, self.fixedSize, False)
-                    self.cover(tick.last_price + self.step, self.fixedSize, True)
+                    price = tick.bid_price_1
+                    ref = self.short(price, self.input_ss, False)
+                    self.write_log(u'开空单{},委托价:{}'.format(ref, price))
+                    #ref = self.cover(price + self.step, self.input_ss, True)
+                    #self.write_log(u'平空停止单{}'.format(ref))
                     self.entrust = 1
                 elif TA.askBidVolumeDif() < 0:
-                    self.buy(tick.last_price, self.fixedSize, False)
-                    self.sell(tick.last_price - self.step, self.fixedSize, True)
+                    price = tick.ask_price_1
+                    ref = self.buy(tick.ask_price_1, self.input_ss, False)
+                    self.write_log(u'开多单{},委托价:{}'.format(ref, price))
+                    #ref = self.sell(price - self.step, self.input_ss, True)
+                    #self.write_log(u'平多停止单{}'.format(ref))
                     self.entrust = 1
 
-            elif self.pos > 0:
-                # 如果持有多单，如果已经是买入价格正向N3个点，再次判断趋势，如果已经不符合，市价卖出。如果持有，清掉之前阻止单，改挂当前价位反向2个点阻止单。
-                if tick.last_price - self.posPrice >= self.step * 1.5:
-                    if TA.askBidVolumeDif() < 0:
-                        self.cancel_all()
-                        self.sell(tick.last_price - self.step, self.fixedSize, True)
-                    else:
-                        self.cancel_all()
-                        self.sell(tick.last_price, self.fixedSize, False)
-                        self.entrust = 1
+            elif self.poss > 0:
+                # 如果持有多单，如果已经是买入价格正向3个点，再次判断趋势，如果已经不符合，市价卖出。如果持有，清掉之前阻止单，改挂当前价位反向2个点阻止单。
 
-            elif self.pos < 0:
-                # 如果持有空单，如果已经是买入价格反向N3个点，再次判断趋势，如果已经不符合，市价卖出。如果持有，清掉之前阻止单，改挂当前价位反向2个点阻止单。
-                if tick.last_price - self.posPrice <= - self.step * 1.5:
-                    if TA.askBidVolumeDif() > 0:
+                if tick.last_price - self.posPrice >= self.new_step:
+                    #if TA.askBidVolumeDif() < 0:
                         self.cancel_all()
-                        self.cover(tick.last_price + self.step, self.fixedSize, True)
-                    else:
+                        price =  tick.last_price - self.step
+                        ref = self.sell(price, self.input_ss, True)
+                        self.new_step = self.new_step + self.step
+                        self.write_log(u'更新开多阻止单委托单号{}，价格{}'.format(ref, price))
+                    #else:
+                    #    self.cancel_all()
+                    #    ref = self.sell(tick.bid_price_1, self.input_ss, False)
+                    #    self.write_log(u'平多单号{},委托价：{}'.format(ref, tick.bid_price_1))
+                    #    self.entrust = 1
+
+            elif self.poss < 0:
+                # 如果持有空单，如果已经是买入价格反向3个点，再次判断趋势，如果已经不符合，市价卖出。如果持有，清掉之前阻止单，改挂当前价位反向2个点阻止单。
+                if tick.last_price - self.posPrice <= -self.new_step:
+                    #if TA.askBidVolumeDif() > 0:
                         self.cancel_all()
-                        self.cover(tick.last_price, self.fixedSize, False)
-                        self.entrust = 1
+                        price =  tick.last_price + self.step
+                        ref = self.cover(price, self.input_ss, True)
+                        self.new_step = self.new_step + self.step
+                        self.write_log(u'更新开空阻止单委托单号{}，价格{}'.format(ref, price))
+                    #else:
+                    #    self.cancel_all()
+                    #    ref = self.cover(tick.ask_price_1, self.input_ss, False)
+                    #    self.write_log(u'平空单号{},委托价：{}'.format(ref, tick.ask_price_1))
+                    #    self.entrust = 1
         else:
-            if self.pos > 0:
-                self.sell(tick.close, abs(self.pos), False)
+            if self.poss > 0:
+                self.sell(tick.last_price, abs(self.pos), False)
                 self.entrust = 1
-            elif self.pos < 0:
-                self.cover(tick.close, abs(self.pos), False)
+            elif self.poss < 0:
+                self.cover(tick.last_price, abs(self.pos), False)
                 self.entrust = 1
-            elif self.pos == 0:
+            elif self.poss == 0:
                 return
 
     # ----------------------------------------------------------------------
     def on_bar(self, bar: BarData):
         """收到Bar推送（必须由用户继承实现）"""
+        pass
 
     # ----------------------------------------------------------------------
-    def on_XminBar(self, bar):
+    def on_window_bar(self, bar):
         """收到X分钟K线"""
+        pass
 
     # ----------------------------------------------------------------------
     def on_order(self, order: OrderData):
         """收到委托变化推送（必须由用户继承实现）"""
-        self.write_log(u'报单更新，orderRef:{}'.format(order.orderid))
-        pass
+        '''    
+        SUBMITTING = "提交中"
+        NOTTRADED = "未成交"
+        PARTTRADED = "部分成交"
+        ALLTRADED = "全部成交"
+        CANCELLED = "已撤销"
+        REJECTED = "拒单"
+        '''
+        self.write_log(u'报单更新，{},{},{},{}单,价{}'.format(order.orderid,  order.status.value,
+                                                   order.offset.value,  order.direction.value, order.price))
+        if order.status == Status.NOTTRADED:
+            if order.offset == Offset.OPEN:
+                self.write_log("取消所有单")
+                self.cancel_all()
+                self.entrust = 0
+        if order.status in [Status.ALLTRADED]:
+            if order.offset == Offset.OPEN:
+                self.new_step = self.step * 1.5
+                if order.direction == Direction.SHORT:
+                    ref = self.cover(order.price + self.step, self.input_ss, True)
+                    self.write_log(u'平空停止单{}'.format(ref))
+                elif order.direction == Direction.LONG:
+                    ref = self.sell(order.price - self.step, self.input_ss, True)
+                    self.write_log(u'平多停止单{}'.format(ref))
+
+            self.entrust = 0
+        elif order.status in [Status.CANCELLED,Status.REJECTED]:
+            self.entrust = 0
+        else:
+            pass
+        self.put_event()
 
     # ----------------------------------------------------------------------
     def on_trade(self, trade: TradeData):
 
         self.posPrice = trade.price
+        if trade.direction == Direction.LONG:
+            if self.poss <=0: #parttraded
+                self.poss = self.poss + self.input_ss
+        elif trade.direction == Direction.SHORT:
+            if self.poss >=0: #parttraded
+                self.poss = self.poss - self.input_ss
         # 同步数据到数据库
         self.sync_data()
         # 发出状态更新事件
-        self.entrust = 0
-        self.write_log(u'交易完成，orderRef:{}'.format(trade.orderid))
+        #self.entrust = 0
+        msg = u'{}{}{},{}张,价格:{}'.format(trade.symbol,  trade.offset.value,  trade.direction.value,  trade.volume,  trade.price)
+        self.write_log(u'----交易完成,{},{}'.format(trade.orderid, msg))
+        sendWxMsg(msg,'')
         self.put_event()
 
     # ----------------------------------------------------------------------
-    def on_stop_order(self, stop_order: StopOrder):
+    def on_stop_order(self, so: StopOrder):
         """停止单推送"""
-        self.write_log(u'停止单触发，orderRef:{}'.format(stop_order.stop_orderid))
-
+        self.write_log(u'停止单触发，{},价格:{}'.format(so.stop_orderid, so.price))
+        self.put_event()
 
 
 ########################################################################
@@ -200,13 +262,13 @@ class TickArrayManager(object):
         self.size = size  # 缓存大小
         self.inited = False  # True if count>=size
 
-        self.Ticklast_priceArray = numpy.zeros(self.size)
-        self.TickaskVolume1Array = numpy.zeros(self.size)
-        self.TickbidVolume1Array = numpy.zeros(self.size)
-        self.TickaskPrice1Array = numpy.zeros(self.size)
-        self.TickbidPrice1Array = numpy.zeros(self.size)
-        self.TickopenInterestArray = numpy.zeros(self.size)
-        self.TickvolumeArray = numpy.zeros(self.size)
+        self.Ticklast_priceArray = np.zeros(self.size)
+        self.TickaskVolume1Array = np.zeros(self.size)
+        self.TickbidVolume1Array = np.zeros(self.size)
+        self.TickaskPrice1Array = np.zeros(self.size)
+        self.TickbidPrice1Array = np.zeros(self.size)
+        self.TickopenInterestArray = np.zeros(self.size)
+        self.TickvolumeArray = np.zeros(self.size)
 
     # ----------------------------------------------------------------------
     def updateTick(self, tick):
@@ -232,4 +294,4 @@ class TickArrayManager(object):
         self.TickvolumeArray[-1] = tick.volume
 
     def askBidVolumeDif(self):
-        return (self.TickaskPrice1Array.sum() - self.TickbidVolume1Array.sum())
+        return (self.TickaskVolume1Array.sum() - self.TickbidVolume1Array.sum())

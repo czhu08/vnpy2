@@ -58,10 +58,12 @@ STATUS_HBDM2VT = {
 ORDERTYPE_VT2HBDM = {
     OrderType.MARKET: "opponent",
     OrderType.LIMIT: "limit",
+    OrderType.LIGHT: "lightning"
 }
 ORDERTYPE_HBDM2VT = {v: k for k, v in ORDERTYPE_VT2HBDM.items()}
 ORDERTYPE_HBDM2VT[1] = OrderType.LIMIT
 ORDERTYPE_HBDM2VT[3] = OrderType.MARKET
+ORDERTYPE_HBDM2VT[4] = OrderType.LIGHT
 
 DIRECTION_VT2HBDM = {
     Direction.LONG: "buy",

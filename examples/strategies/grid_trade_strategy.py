@@ -163,9 +163,9 @@ class GridTradeStrategy(CtaTemplate):
             ref = self.sell(price=price, volume=sell_volume)
             if ref is not None and len(ref) > 0:
                 self.entrust = -1
-                self.write_log(u'委托卖出成功, 委托编号:{},委托价格:{},卖出数量{}'.format(ref, price, sell_volume))
+                self.write_log(u'平多委托单号{},委托价：{},数量{}'.format(ref, price, sell_volume))
             else:
-                self.write_log(u'委托卖出{}失败,价格:{},数量:{}'.format(self.vt_symbol, price, sell_volume))
+                self.write_log(u'平多委托单失败:价格:{},数量:{}'.format(price, sell_volume))
 
     def on_bar(self, bar: BarData):
         """
@@ -177,10 +177,8 @@ class GridTradeStrategy(CtaTemplate):
         """
         Callback of new order data update.
         """
-        msg = u'报单更新,委托编号:{},合约:{},方向:{},价格:{},委托:{},成交:{},状态:{}'.format(order.orderid, order.symbol,
-                                 order.direction.value, order.price,
-                                 order.volume,order.traded,
-                                 order.status.value)
+        msg = u'报单更新,委托编号:{},合约:{},{},价格:{},成交:{},{}'.format(order.orderid, order.symbol,
+                                 order.offset.value, order.price, order.traded, order.status.value)
         self.write_log(msg)
 
         if order.volume == order.traded or order.status == Status.ALLTRADED:
@@ -202,7 +200,7 @@ class GridTradeStrategy(CtaTemplate):
             base_pos = self.cta_engine.main_engine.get_account('.'.join([order.exchange.value, self.base]))
             volumn = round_to(base_pos.balance, self.min_volumn)
 
-            sub = order.symbol + ' ' + order.direction.value + u'单 {}'.format(order.price)
+            sub = order.symbol + ' ' + order.offset.value + u',{}'.format(order.price)
             self.roi = round(self.roi, 4)
             msg2 = u'{},\n低吸次数:{},高抛次数:{},套利:{}{}, 持仓{}'.format(msg, self.buy_times, self.sell_times, self.roi,self.quote, volumn)
 
