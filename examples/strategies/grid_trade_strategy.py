@@ -1,3 +1,5 @@
+from time import sleep
+
 from examples.util.util_wx_ft import sendWxMsg
 from vnpy.app.cta_strategy import (
     CtaTemplate,
@@ -207,6 +209,7 @@ class GridTradeStrategy(CtaTemplate):
             self.send_email(msg2)
             sendWxMsg(sub, msg2)
         elif order.status in [Status.CANCELLED,Status.REJECTED]:
+            sleep(10)  #10s
             self.entrust = 0
 
         self.put_event()

@@ -127,16 +127,16 @@ class TickOneStrategy(CtaTemplate):
 
             # 如果空仓，分析过去10个对比，ask卖方多下空单，bid买方多下多单，并放两个差价阻止单
             if TA.askBidVolumeDif() > 0:
-                price = tick.bid_price_1
+                price = tick.bid_price_5
                 ref = self.short(price, self.input_ss, False)
-                self.write_log(u'开空单{},委托价:{}'.format(ref, price))
+                self.write_log(u'开空单{},价:{}'.format(ref, price))
                 #ref = self.cover(price + self.step, self.input_ss, True)
                 #self.write_log(u'平空停止单{}'.format(ref))
                 self.entrust = 1
             elif TA.askBidVolumeDif() <= 0:
-                price = tick.ask_price_1
-                ref = self.buy(tick.ask_price_1, self.input_ss, False)
-                self.write_log(u'开多单{},委托价:{}'.format(ref, price))
+                price = tick.ask_price_5
+                ref = self.buy(price, self.input_ss, False)
+                self.write_log(u'开多单{},价:{}'.format(ref, price))
                 #ref = self.sell(price - self.step, self.input_ss, True)
                 #self.write_log(u'平多停止单{}'.format(ref))
                 self.entrust = 1
@@ -157,8 +157,8 @@ class TickOneStrategy(CtaTemplate):
                         price = tick.last_price - self.step * 0.5
                     price = round_to(price, self.min_diff)
                     ref = self.sell(price, self.input_ss, True)
-                    self.new_step = self.new_step + self.step * 0.5
-                    self.write_log(u'  更新开多停止单号{}，价格{}'.format(ref, price))
+                    self.new_step += self.step * 0.5
+                    self.write_log(u'  更新开多停止单{},价:{}'.format(ref, price))
                 #else:
                 #    self.cancel_all()
                 #    ref = self.sell(tick.bid_price_1, self.input_ss, False)
@@ -177,8 +177,8 @@ class TickOneStrategy(CtaTemplate):
                         price = tick.last_price + self.step * 0.5
                     price = round_to(price, self.min_diff)
                     ref = self.cover(price, self.input_ss, True)
-                    self.new_step = self.new_step + self.step * 0.5
-                    self.write_log(u'  更新开空停止单号{}，价格{}'.format(ref, price))
+                    self.new_step += self.step * 0.5
+                    self.write_log(u'  更新开空停止单{},价:{}'.format(ref, price))
                 #else:
                 #    self.cancel_all()
                 #    ref = self.cover(tick.ask_price_1, self.input_ss, False)
@@ -219,10 +219,12 @@ class TickOneStrategy(CtaTemplate):
 2019-07-28 00:01:58,408  INFO: tick1: 报单更新，19072722371710924,提交中,平,多单,价87.204
 2019-07-28 00:01:58,785  INFO: 委托请求出错，代码：1040，信息：Invalid amount, please modify and order again.
         '''
-        msg = u'{}{},{}张,价格:{}'.format(order.offset.value, order.direction.value,
-                                         order.traded, order.price)
+        if order.offset == Offset.OPEN:
+            msg = u'{}{},{}张,价:{}'.format(order.offset.value, order.direction.value, order.traded, order.price)
+        else:
+            msg = u'{},{}张,价:{}'.format(order.offset.value, order.traded, order.price)
         self.write_log(u'    报单更新,{},{},{}'.format(order.orderid,  order.status.value, msg))
-        if order.offset == Offset.CLOSE and order.status == Status.SUBMITTING:
+        if order.status == Status.SUBMITTING:
             self.entrust = 1
         if order.status == Status.NOTTRADED:
             # if order.offset == Offset.OPEN:
@@ -234,34 +236,25 @@ class TickOneStrategy(CtaTemplate):
         if order.status in [Status.ALLTRADED]:
             if order.offset == Offset.OPEN:
                 self.new_step = self.step * 0.5
-                if order.direction == Direction.SHORT:
-                    price = order.price + self.step
-                    price = round_to(price, self.min_diff)
-                    ref = self.cover(price, self.input_ss, True)
-                    self.write_log(u'平空停止单{},{}'.format(ref, price))
-                elif order.direction == Direction.LONG:
-                    price = order.price - self.step
-                    price = round_to(price, self.min_diff)
-                    ref = self.sell(price, self.input_ss, True)
-                    self.write_log(u'平多停止单{},{}'.format(ref, price))
-            self.wincount = 0
 
+            self.wincount = 0
             if order.direction == Direction.LONG:
                     self.poss += self.input_ss
             elif order.direction == Direction.SHORT:
                     self.poss -= self.input_ss
 
             self.entrust = 0
-
             sendWxMsg(order.symbol+msg, '')
         elif order.status in [Status.CANCELLED,Status.REJECTED]:
-            if order.offset == Offset.CLOSE:
+            if order.offset == Offset.CLOSE:  # 停止单异常
                 self.write_log("取消多余的平仓单")
                 self.cancel_all()
+
             sleep(10)  #10s
             self.entrust = 0
         else:
             pass
+
         self.put_event()
 
     # ----------------------------------------------------------------------
@@ -269,8 +262,22 @@ class TickOneStrategy(CtaTemplate):
         # 同步数据到数据库
         self.posPrice = trade.price
         self.sync_data()
-        # msg = u'{}{}{},{}张,价格:{}'.format(trade.symbol,  trade.offset.value,  trade.direction.value,  trade.volume,  trade.price)
-        # self.write_log(u'交易完成,{},{},pos:{}'.format(trade.orderid, msg, self.poss))
+        if self.entrust == 0:
+            msg = u'{}{},{}张,成交价:{}'.format(trade.offset.value,  trade.direction.value,  trade.volume,  trade.price)
+            self.write_log(u'交易完成,{},{},pos:{}'.format(trade.orderid, msg, self.poss))
+
+            if trade.offset == Offset.OPEN:
+                if trade.direction == Direction.LONG:
+                    price = trade.price - self.step
+                    price = round_to(price, self.min_diff)
+                    ref = self.sell(price, self.input_ss, True)
+                    self.write_log(u'开多停止单{},价:{}'.format(ref, price))
+                elif trade.direction == Direction.SHORT:
+                    price = trade.price + self.step
+                    price = round_to(price, self.min_diff)
+                    ref = self.cover(price, self.input_ss, True)
+                    self.write_log(u'开空停止单{},价:{}'.format(ref, price))
+
         self.put_event()
 
     # ----------------------------------------------------------------------
@@ -304,20 +311,6 @@ class TickArrayManager(object):
         self.TickopenInterestArray = np.zeros(self.size)
         self.TickvolumeArray = np.zeros(self.size)
 
-    def initTick(self, tick):
-        """init tick Array"""
-        if not self.inited and self.count >= self.size:
-            self.inited = True
-
-        self.Ticklast_priceArray[self.count] = tick.last_price
-        self.TickaskVolume1Array[self.count] = tick.ask_volume_1
-        self.TickbidVolume1Array[self.count] = tick.bid_volume_1
-        self.TickaskPrice1Array[self.count] = tick.ask_price_1
-        self.TickbidPrice1Array[self.count] = tick.bid_price_1
-        self.TickopenInterestArray[self.count] = tick.open_interest
-        self.TickvolumeArray[self.count] = tick.volume
-
-        self.count += 1
     # ----------------------------------------------------------------------
     def updateTick(self, tick):
         """更新tick Array"""
