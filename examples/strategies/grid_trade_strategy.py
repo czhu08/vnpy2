@@ -147,9 +147,9 @@ class GridTradeStrategy(CtaTemplate):
             ref = self.buy(price=price, volume=buy_volume)
             if ref is not None and len(ref) > 0:
                 self.entrust = 1
-                self.write_log(u'开多委托单号{},委托价：{},数量{}'.format(ref, price, buy_volume ))
+                self.write_log(u'开多委托单号{},价：{},数量{}'.format(ref, price, buy_volume ))
             else:
-                self.write_log(u'开多委托单失败:价格:{},数量:{}'.format(price, buy_volume))
+                self.write_log(u'开多委托单失败:价:{},数量:{}'.format(price, buy_volume))
 
         elif price >= self.new_up:
             # 卖出，平多
@@ -163,9 +163,9 @@ class GridTradeStrategy(CtaTemplate):
             ref = self.sell(price=price, volume=sell_volume)
             if ref is not None and len(ref) > 0:
                 self.entrust = -1
-                self.write_log(u'平多委托单号{},委托价：{},数量{}'.format(ref, price, sell_volume))
+                self.write_log(u'平多委托单号{},价：{},数量{}'.format(ref, price, sell_volume))
             else:
-                self.write_log(u'平多委托单失败:价格:{},数量:{}'.format(price, sell_volume))
+                self.write_log(u'平多委托单失败:价:{},数量:{}'.format(price, sell_volume))
 
     def on_bar(self, bar: BarData):
         """
@@ -177,7 +177,7 @@ class GridTradeStrategy(CtaTemplate):
         """
         Callback of new order data update.
         """
-        msg = u'报单更新,委托编号:{},合约:{},{},价格:{},成交:{},{}'.format(order.orderid, order.symbol,
+        msg = u'    报单更新,{},{},{},价:{},成交:{},{}'.format(order.orderid, order.symbol,
                                  order.offset.value, order.price, order.traded, order.status.value)
         self.write_log(msg)
 
@@ -215,9 +215,9 @@ class GridTradeStrategy(CtaTemplate):
         """
         Callback of new trade data update.
         """
-        self.write_log(u'交易完成')
-
-        self.put_event()
+        # self.write_log(u'交易完成')
+        # self.put_event()
+        pass
 
     def on_stop_order(self, stop_order: StopOrder):
         """
