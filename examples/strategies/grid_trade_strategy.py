@@ -8,6 +8,7 @@ from vnpy.app.cta_strategy import (
     OrderData,
     StopOrder
 )
+from vnpy.app.cta_strategy.base import EngineType
 from vnpy.trader.constant import Status, Direction
 from vnpy.trader.object import BarData
 from vnpy.trader.utility import round_to
@@ -104,17 +105,23 @@ class GridTradeStrategy(CtaTemplate):
 
         if tick.last_price > self.grid_up_line:
             if self.__singleton1:
-                sendWxMsg(u'价格上涨超出区间',u'价格:{}'.format(tick.last_price))
+                if self.get_engine_type() == EngineType.LIVE:
+                    sendWxMsg(u'价格上涨超出区间',u'价格:{}'.format(tick.last_price))
                 self.__singleton1 = False
             return
 
         # 下限清仓
         if tick.last_price < self.grid_dn_line:
             if self.__singleton2:
-                sendWxMsg(u'价格下跌超出区间',u'价格:{}'.format(tick.last_price))
+                if self.get_engine_type() == EngineType.LIVE:
+                    sendWxMsg(u'价格下跌超出区间',u'价格:{}'.format(tick.last_price))
                 self.__singleton2 = False
-                base_pos = self.cta_engine.main_engine.get_account('.'.join([tick.exchange.value, self.base]))
-                sell_volume = base_pos.balance
+                if self.get_engine_type() == EngineType.LIVE:
+                    base_pos = self.cta_engine.main_engine.get_account('.'.join([tick.exchange.value, self.base]))
+                    sell_volume = base_pos.balance
+                else:
+                    sell_volume = 50
+
                 sell_volume = round_to(sell_volume, self.min_volumn)
                 if sell_volume >= self.min_volumn:
                     price = tick.bid_price_1  # 买一价
@@ -123,7 +130,8 @@ class GridTradeStrategy(CtaTemplate):
                     if ref is not None and len(ref) > 0:
                         self.entrust = -1
                         self.write_log(u'清仓委托卖出成功, 委托编号:{},委托价格:{},卖出数量{}'.format(ref, price, sell_volume))
-                        sendWxMsg(u'清仓委托卖出成功', u'委托编号:{},委托价格:{},卖出数量{}'.format(ref, price, sell_volume))
+                        if self.get_engine_type() == EngineType.LIVE:
+                            sendWxMsg(u'清仓委托卖出成功', u'委托编号:{},委托价格:{},卖出数量{}'.format(ref, price, sell_volume))
                     else:
                         self.write_log(u'清仓委托卖出{}失败,价格:{},数量:{}'.format(self.vt_symbol, price, sell_volume))
             return
@@ -138,10 +146,14 @@ class GridTradeStrategy(CtaTemplate):
 
         if price <= self.new_down:
             # 买入,开多
-            account = self.cta_engine.main_engine.get_account('.'.join([tick.exchange.value, self.quote]))
+            if self.get_engine_type() == EngineType.LIVE:
+                account = self.cta_engine.main_engine.get_account('.'.join([tick.exchange.value, self.quote]))
+                buy = account.balance
+            else:
+                buy = 1000
             price = tick.ask_price_1  #卖一价
             price = round_to(price, self.min_diff)
-            buy_volume = min(account.balance/price, float(self.input_ss))
+            buy_volume = min(buy/price, float(self.input_ss))
             buy_volume = round_to(buy_volume, self.min_volumn)
             if buy_volume < self.min_volumn:
                 return
@@ -155,10 +167,15 @@ class GridTradeStrategy(CtaTemplate):
 
         elif price >= self.new_up:
             # 卖出，平多
-            base_pos = self.cta_engine.main_engine.get_account('.'.join([tick.exchange.value, self.base]))
+            if self.get_engine_type() == EngineType.LIVE:
+                base_pos = self.cta_engine.main_engine.get_account('.'.join([tick.exchange.value, self.base]))
+                sell_volume1 = base_pos.balance
+            else:
+                sell_volume1 = 10
+
             price = tick.bid_price_1  #买一价
             price = round_to(price, self.min_diff)
-            sell_volume = min(base_pos.balance, float(self.input_ss))
+            sell_volume = min(sell_volume1, float(self.input_ss))
             sell_volume = round_to(sell_volume, self.min_volumn)
             if sell_volume < self.min_volumn:
                 return
@@ -198,16 +215,20 @@ class GridTradeStrategy(CtaTemplate):
             self.new_down = self.base_line / (1 + self.grid_height / 100)
             self.new_down = round_to(self.new_down, self.min_diff)
             self.entrust = 0
-
-            base_pos = self.cta_engine.main_engine.get_account('.'.join([order.exchange.value, self.base]))
-            volumn = round_to(base_pos.balance, self.min_volumn)
+            if self.get_engine_type() == EngineType.LIVE:
+                base_pos = self.cta_engine.main_engine.get_account('.'.join([order.exchange.value, self.base]))
+                volumn = round_to(base_pos.balance, self.min_volumn)
+            else:
+                volumn = 10
 
             sub = order.symbol + ' ' + order.offset.value + u',{}'.format(order.price)
             self.roi = round(self.roi, 4)
             msg2 = u'{},\n低吸次数:{},高抛次数:{},套利:{}{}, 持仓{}'.format(msg, self.buy_times, self.sell_times, self.roi,self.quote, volumn)
 
-            self.send_email(msg2)
-            sendWxMsg(sub, msg2)
+            if self.get_engine_type() == EngineType.LIVE:
+                self.send_email(msg2)
+                sendWxMsg(sub, msg2)
+
         elif order.status in [Status.CANCELLED,Status.REJECTED]:
             sleep(10)  #10s
             self.entrust = 0
