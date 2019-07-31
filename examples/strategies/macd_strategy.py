@@ -33,7 +33,7 @@ class MacdStrategy(CtaTemplate):
         )
 
         self.bg = BarGenerator(self.on_bar)
-        self.am = ArrayManager()
+        self.am = ArrayManager(30)
 
         self.count = 0
 
@@ -42,6 +42,9 @@ class MacdStrategy(CtaTemplate):
 
         self.cross_over = False
         self.cross_below = False
+
+        self.order_time = 0
+        self.entrust = 0
 
     def on_init(self):
         """
@@ -62,7 +65,6 @@ class MacdStrategy(CtaTemplate):
         Callback when strategy is stopped.
         """
         self.write_log("策略停止")
-
         self.put_event()
 
     def on_tick(self, tick: TickData):
@@ -73,17 +75,16 @@ class MacdStrategy(CtaTemplate):
             self.cross_over = False
             self.buy(tick.ask_price_1, self.input_ss)
             if self.short_pos >= 1:
-                self.cover(tick.ask_price_1, self.short_pos )
+                self.cover(tick.ask_price_2, self.short_pos )
 
         elif self.cross_below:
             self.cross_below = False
             self.short(tick.bid_price_1, self.input_ss)
             if self.long_pos >= 1:
-                self.sell(tick.bid_price_1, self.long_pos )
-
-        self.put_event()
+                self.sell(tick.bid_price_2, self.long_pos )
 
         self.bg.update_tick(tick)
+        self.put_event()
 
     def on_bar(self, bar: BarData):
         """
@@ -123,11 +124,23 @@ class MacdStrategy(CtaTemplate):
             else:
                 self.long_pos = 0
 
+        if self.entrust == 1:
+            self.order_time +=1
+        else:
+            self.order_time = 0
+        if self.order_time >=3:   # 2分钟未完成的订单， 取消
+            self.write_log("取消超时未完成的订单")
+            self.cancel_all()
+            self.order_time = 0
+
+        self.put_event()
+
     def on_order(self, order: OrderData):
         """
         Callback of new order data update.
         """
         if order.status == Status.SUBMITTING:
+            self.entrust = 1
             if order.offset == Offset.OPEN:
                 msg = u'{}{},{}张,价:{}'.format(order.offset.value, order.direction.value, order.volume, order.price)
             else:
@@ -139,6 +152,7 @@ class MacdStrategy(CtaTemplate):
 
             self.write_log(u'    报单更新,{},{},{}'.format(order.orderid, order.status.value, msg))
         elif order.status in [Status.ALLTRADED]:
+            self.entrust = 0
             if order.offset == Offset.OPEN:
                 msg = u'{}{},{}张,价:{}'.format(order.offset.value, order.direction.value, order.volume, order.price)
             else:
@@ -158,6 +172,7 @@ class MacdStrategy(CtaTemplate):
             if order.offset == Offset.CLOSE:  # 平单异常
                 self.write_log("取消多余的平仓单")
                 self.cancel_all()
+            self.entrust = 0
             sleep(5)  #10s
 
 
