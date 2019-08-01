@@ -16,7 +16,7 @@ global wxft_lock
 wxft_lock = Lock()
 
 # 这里可以设置多个微信接受者的Token,列表方式添加就好
-SEC_TOKENS = ['SCU54991T69932fe9bb4beb192e3698bd766c6f325d242f847d3f0']    #czhu08
+SEC_TOKENS = ['']    #czhu08
 
 class wxft_thread(Thread):
     def __init__(self,token, text, desp):
