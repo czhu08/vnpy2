@@ -14,9 +14,11 @@ from vnpy.app.cta_strategy import (
 from vnpy.app.cta_strategy.base import EngineType
 from vnpy.trader.constant import Status, Offset, Direction
 
+# LTC190927.HUOBI
+# N分钟bar MACD金叉买， 死叉卖
 
 class MacdStrategy(CtaTemplate):
-    author = "用Python的交易员"
+    author = "czhu"
 
     x_min_bar = 1 # 几分钟bar, 必须能被60整除
     input_ss = 1
@@ -38,7 +40,7 @@ class MacdStrategy(CtaTemplate):
         else:
             self.bg = BarGenerator(self.on_bar, self.x_min_bar, self.on_window_bar)
 
-        self.am = ArrayManager()
+        self.am = ArrayManager(40)
 
         self.count = 0
 
@@ -78,15 +80,15 @@ class MacdStrategy(CtaTemplate):
         """
         if self.cross_over:
             self.cross_over = False
-            self.buy(tick.ask_price_1, self.input_ss)
+            self.buy(tick.last_price, self.input_ss)
             if self.short_pos >= 1:
-                self.cover(tick.ask_price_2, self.short_pos )
+                self.cover(tick.ask_price_1, self.short_pos )
 
         elif self.cross_below:
             self.cross_below = False
-            self.short(tick.bid_price_1, self.input_ss)
+            self.short(tick.last_price, self.input_ss)
             if self.long_pos >= 1:
-                self.sell(tick.bid_price_2, self.long_pos )
+                self.sell(tick.bid_price_1, self.long_pos )
 
         self.bg.update_tick(tick)
         self.put_event()
@@ -104,8 +106,8 @@ class MacdStrategy(CtaTemplate):
         """
         Callback of new bar data update.
         """
-        self.count += 1
-        self.write_log("on_x_min_bar,{}".format(self.count))
+        # self.count += 1
+        # self.write_log("{}min_bar:{}".format(self.x_min_bar, self.count))
 
         am = self.am
         am.update_bar(bar)
@@ -116,10 +118,18 @@ class MacdStrategy(CtaTemplate):
         self.cross_over = macd[-1] > macdsignal[-1] and macd[-2] < macdsignal[-2]
         self.cross_below = macd[-1] < macdsignal[-1] and macd[-2] > macdsignal[-2]
 
+        tan = 0
+        if self.cross_over or self.cross_below:
+            tan = macd[-1] - macd[-2] - (macdsignal[-1] - macdsignal[-2])
+            tan = round(tan, 5)
+            if tan < 0.01 and tan > -0.01:  # 1m经验值
+                self.write_log(u'跳过交叉:{}, 斜率:{}'.format(self.count_over, tan))
+                self.cross_over = False
+                self.cross_below = False
+
         if self.cross_over:
             self.count_over += 1
-            self.write_log(u'cross_over,{}'.format(self.count_over))
-
+            self.write_log(u'金叉:{}, 斜率:{}'.format(self.count_over, tan) )
             short_position = self.cta_engine.main_engine.get_position('.'.join([self.vt_symbol, 'Direction.SHORT']))
             if short_position is not None:
                 self.short_pos = short_position.volume
@@ -129,8 +139,7 @@ class MacdStrategy(CtaTemplate):
 
         elif self.cross_below:
             self.count_below += 1
-            self.write_log(u'cross_below,{}'.format(self.count_below))
-
+            self.write_log(u'死叉:{}, 斜率:{}'.format(self.count_below, tan) )
             long_position = self.cta_engine.main_engine.get_position('.'.join([self.vt_symbol, 'Direction.LONG']))
             if long_position is not None:
                 self.long_pos = long_position.volume
