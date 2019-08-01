@@ -18,12 +18,13 @@ from vnpy.trader.constant import Status, Offset, Direction
 class MacdStrategy(CtaTemplate):
     author = "用Python的交易员"
 
+    x_min_bar = 1 # 几分钟bar, 必须能被60整除
     input_ss = 1
 
     count_over = 0
     count_below = 0
 
-    parameters = ["input_ss"]
+    parameters = ["x_min_bar", "input_ss"]
     variables = ["count_over", "count_below"]
 
     def __init__(self, cta_engine, strategy_name, vt_symbol, setting):
@@ -32,8 +33,12 @@ class MacdStrategy(CtaTemplate):
             cta_engine, strategy_name, vt_symbol, setting
         )
 
-        self.bg = BarGenerator(self.on_bar)
-        self.am = ArrayManager(30)
+        if self.x_min_bar == 1:
+            self.bg = BarGenerator(self.on_bar)
+        else:
+            self.bg = BarGenerator(self.on_bar, self.x_min_bar, self.on_window_bar)
+
+        self.am = ArrayManager()
 
         self.count = 0
 
@@ -86,12 +91,21 @@ class MacdStrategy(CtaTemplate):
         self.bg.update_tick(tick)
         self.put_event()
 
-    def on_bar(self, bar: BarData):
+    def on_bar(self, bar : BarData):
+        if self.x_min_bar == 1:
+            self.on_x_min_bar(bar)
+        else:
+            self.bg.update_bar(bar)
+
+    def on_window_bar(self, bar: BarData):
+        self.on_x_min_bar(bar)
+
+    def on_x_min_bar(self, bar: BarData):
         """
         Callback of new bar data update.
         """
         self.count += 1
-        self.write_log("on_bar,{}".format(self.count))
+        self.write_log("on_x_min_bar,{}".format(self.count))
 
         am = self.am
         am.update_bar(bar)

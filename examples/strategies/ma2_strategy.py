@@ -55,7 +55,7 @@ class Ma2Strategy(CtaTemplate):
         Callback when strategy is inited.
         """
         self.write_log("策略初始化")
-        self.load_bar(30)
+        self.load_bar(10)
 
     def on_start(self):
         """
@@ -101,26 +101,26 @@ class Ma2Strategy(CtaTemplate):
         if not am.inited:
             return
 
-        # if self.fast_window >=2:
-        #     fast_ma = am.sma(self.fast_window, array=True)
-        #     fast_ma0 = fast_ma[-1]
-        #     fast_ma1 = fast_ma[-2]
-        #
-        # else:  # 1分钟bar的首尾价
-        #     fast_ma0 = bar.close_price
-        #     fast_ma1 = bar.open_price
-        #
-        # slow_ma = am.sma(self.slow_window, array=True)
-        # slow_ma0 = slow_ma[-1]
-        # slow_ma1 = slow_ma[-2]
-        #
-        # self.cross_over = fast_ma0 > slow_ma0 and fast_ma1 < slow_ma1
-        # self.cross_below = fast_ma0 < slow_ma0 and fast_ma1 > slow_ma1
+        if self.fast_window >=2:
+            fast_ma = am.sma(self.fast_window, array=True)
+            fast_ma0 = fast_ma[-1]
+            fast_ma1 = fast_ma[-2]
 
-        macd, macdsignal, macdhist = am.macd(12, 26, 9, array=True)
-        self.cross_over = macd[-1] > macdsignal[-1] and macd[-2] < macdsignal[-2]
-        self.cross_below = macd[-1] < macdsignal[-1] and macd[-2] > macdsignal[-2]
-        self.write_log(u'cross_over:{}, cross_below:{}'.format(self.cross_over, self.cross_below))
+        else:  # 1分钟bar的首尾价
+            fast_ma0 = bar.close_price
+            fast_ma1 = bar.open_price
+
+        slow_ma = am.sma(self.slow_window, array=True)
+        slow_ma0 = slow_ma[-1]
+        slow_ma1 = slow_ma[-2]
+
+        self.cross_over = fast_ma0 > slow_ma0 and fast_ma1 < slow_ma1
+        self.cross_below = fast_ma0 < slow_ma0 and fast_ma1 > slow_ma1
+
+        # macd, macdsignal, macdhist = am.macd(12, 26, 9, array=True)
+        # self.cross_over = macd[-1] > macdsignal[-1] and macd[-2] < macdsignal[-2]
+        # self.cross_below = macd[-1] < macdsignal[-1] and macd[-2] > macdsignal[-2]
+        # self.write_log(u'cross_over:{}, cross_below:{}'.format(self.cross_over, self.cross_below))
 
         if self.cross_over:
             self.count_over += 1
