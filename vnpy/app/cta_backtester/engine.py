@@ -78,7 +78,9 @@ class BacktesterEngine(BaseEngine):
         """
         Load strategy class from source code.
         """
-        path2 = Path.cwd().parent.joinpath("strategies")
+        # path2 = Path.cwd().parent.joinpath("strategies")
+        path2 = Path(__file__).parent.parent.parent.parent
+        path2 = path2.joinpath("examples", "strategies")
         self.load_strategy_class_from_folder(path2, "examples.strategies")
 
         app_path = Path(__file__).parent.parent
