@@ -4,6 +4,7 @@ General utility functions.
 
 import json
 from pathlib import Path
+import platform
 
 import decimal
 from typing import Callable
@@ -32,8 +33,12 @@ def _get_trader_dir(temp_name: str):
     Get path where trader is running in.
     """
     cwd = Path.cwd()
-    temp_path = cwd.joinpath(temp_name)
+    if platform.system() == 'Darwin':
+        temp_path = cwd.joinpath("examples","vn_trader",temp_name)  
+    else:     
+        temp_path = cwd.joinpath(temp_name)
 
+    
     # If .vntrader folder exists in current working directory,
     # then use it as trader running path.
     if temp_path.exists():
