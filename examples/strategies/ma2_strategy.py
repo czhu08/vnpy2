@@ -125,24 +125,25 @@ class Ma2Strategy(CtaTemplate):
         if self.cross_over:
             self.count_over += 1
             self.write_log(u'cross_over,{}'.format(self.count_over))
-
-            short_position = self.cta_engine.main_engine.get_position('.'.join([self.vt_symbol, 'Direction.SHORT']))
-            if short_position is not None:
-                self.short_pos = short_position.volume
-                self.write_log(u'    空仓:{}'.format(self.short_pos))
-            else:
-                self.short_pos = 0
+            if self.get_engine_type == EngineType.LIVE:
+                short_position = self.cta_engine.main_engine.get_position('.'.join([self.vt_symbol, 'Direction.SHORT']))
+                if short_position is not None:
+                    self.short_pos = short_position.volume
+                    self.write_log(u'    空仓:{}'.format(self.short_pos))
+                else:
+                    self.short_pos = 0
 
         elif self.cross_below:
             self.count_below += 1
             self.write_log(u'cross_below,{}'.format(self.count_below))
 
-            long_position = self.cta_engine.main_engine.get_position('.'.join([self.vt_symbol, 'Direction.LONG']))
-            if long_position is not None:
-                self.long_pos = long_position.volume
-                self.write_log(u'    多仓:{}'.format(self.long_pos))
-            else:
-                self.long_pos = 0
+            if self.get_engine_type == EngineType.LIVE:
+                long_position = self.cta_engine.main_engine.get_position('.'.join([self.vt_symbol, 'Direction.LONG']))
+                if long_position is not None:
+                    self.long_pos = long_position.volume
+                    self.write_log(u'    多仓:{}'.format(self.long_pos))
+                else:
+                    self.long_pos = 0
 
         self.put_event()
 

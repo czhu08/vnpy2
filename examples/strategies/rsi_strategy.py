@@ -15,23 +15,28 @@ from vnpy.app.cta_strategy.base import EngineType
 from vnpy.trader.constant import Status, Offset, Direction
 
 # LTC190927.HUOBI
-# N分钟bar MACD金叉买， 死叉卖
+# N分钟bar RSI低于20买，高于80卖
 
-class MacdStrategy(CtaTemplate):
+class RSIStrategy(CtaTemplate):
     author = "czhu"
 
     x_min_bar = 1 # 几分钟bar, 必须能被60整除
+    rsi_length = 6
     input_ss = 1
 
-    count_over = 0
-    count_below = 0
+    down_line = 20
+    up_line = 80
 
-    parameters = ["x_min_bar", "input_ss"]
-    variables = ["count_over", "count_below"]
+    down_count = 0
+    up_count = 0
+
+
+    parameters = ["x_min_bar", "rsi_length", "input_ss", "down_line", "up_line"]
+    variables = ["down_count", "up_count"]
 
     def __init__(self, cta_engine, strategy_name, vt_symbol, setting):
         """"""
-        super(MacdStrategy, self).__init__(
+        super(RSIStrategy, self).__init__(
             cta_engine, strategy_name, vt_symbol, setting
         )
 
@@ -43,12 +48,13 @@ class MacdStrategy(CtaTemplate):
         self.am = ArrayManager(40)
 
         self.min_range = 0.01  # 1m 经验值
+        self.rsi_value = 0
 
         self.count = 0
         self.short_pos = 0
         self.long_pos = 0
-        self.cross_over = False
-        self.cross_below = False
+        self.uppest = False
+        self.downest = False
         self.order_time = 0
         self.entrust = 0
 
@@ -77,14 +83,14 @@ class MacdStrategy(CtaTemplate):
         """
         Callback of new tick data update.
         """
-        if self.cross_over:
-            self.cross_over = False
+        if self.downest:
+            self.downest = False
             self.buy(tick.last_price, self.input_ss)
             if self.short_pos >= 1:
                 self.cover(tick.ask_price_1, self.short_pos )
 
-        elif self.cross_below:
-            self.cross_below = False
+        elif self.uppest:
+            self.uppest = False
             self.short(tick.last_price, self.input_ss)
             if self.long_pos >= 1:
                 self.sell(tick.bid_price_1, self.long_pos )
@@ -113,49 +119,48 @@ class MacdStrategy(CtaTemplate):
         if not am.inited:
             return
 
-        macd, macdsignal, macdhist = am.macd(12, 26, 9, array=True)
-        self.cross_over = macd[-1] > macdsignal[-1] and macd[-2] < macdsignal[-2]
-        self.cross_below = macd[-1] < macdsignal[-1] and macd[-2] > macdsignal[-2]
+        new_rsi_value = am.rsi(self.rsi_length)
+        if new_rsi_value > self.down_line and new_rsi_value < self.up_line:
+            self.rsi_value = new_rsi_value
+            return
 
-        tan = 0
-        #PositionData(BaseData):
-        if self.cross_over:
-            self.count_over += 1
-            tan = macd[-1] - macd[-2] - (macdsignal[-1] - macdsignal[-2])
-            tan = round(tan, 5)
-            # if tan < self.min_range and tan > -self.min_range:  # 1m经验值
-            #     self.write_log(u'跳过金叉, 斜率:{}'.format(tan))
-            #     self.cross_over = False
-            # else:
-            self.write_log(u'金叉:{}, 斜率:{}'.format(self.count_over, tan) )
-            if self.get_engine_type() == EngineType.LIVE:
-                short_position = self.cta_engine.main_engine.get_position('.'.join([self.vt_symbol, 'Direction.SHORT']))
-                if short_position is not None:
-                    self.short_pos = short_position.volume - short_position.frozen
-                    self.write_log(u'    空仓:{}'.format(self.short_pos))
+        elif new_rsi_value <= self.down_line:
+            if new_rsi_value <= self.rsi_value:
+                self.rsi_value = new_rsi_value
+                return
+            else:  #做多
+                self.downest = True
+                self.down_count += 1
+                self.write_log(u'    RSI过低:{}'.format(new_rsi_value))
+                if self.get_engine_type() == EngineType.LIVE:
+                    short_position = self.cta_engine.main_engine.get_position('.'.join([self.vt_symbol, 'Direction.SHORT']))
+                    if short_position is not None:
+                        self.short_pos = short_position.volume - short_position.frozen
+                        self.write_log(u'    空仓:{}'.format(self.short_pos))
+                    else:
+                        self.short_pos = 0
                 else:
-                    self.short_pos = 0
-            else:
-                self.short_pos = 10
+                    self.short_pos = 10
 
-        elif self.cross_below:
-            self.count_below += 1
-            tan = macd[-1] - macd[-2] - (macdsignal[-1] - macdsignal[-2])
-            tan = round(tan, 5)
-            # if tan < self.min_range and tan > -self.min_range:  # 1m经验值
-            #     self.write_log(u'跳过死叉, 斜率:{}'.format(tan))
-            #     self.cross_below = False
-            # else:
-            self.write_log(u'死叉:{}, 斜率:{}'.format(self.count_below, tan) )
-            if self.get_engine_type() == EngineType.LIVE:
-                long_position = self.cta_engine.main_engine.get_position('.'.join([self.vt_symbol, 'Direction.LONG']))
-                if long_position is not None:
-                    self.long_pos = long_position.volume - long_position.frozen
-                    self.write_log(u'    多仓:{}'.format(self.long_pos))
+
+        else: # new_rsi_value >= self.up_line:
+            if new_rsi_value >= self.rsi_value:
+                self.rsi_value = new_rsi_value
+                return
+            else:  #做空
+                self.uppest = True
+                self.up_count += 1
+                self.write_log(u'    RSI过高:{}'.format(new_rsi_value))
+                if self.get_engine_type() == EngineType.LIVE:
+                    long_position = self.cta_engine.main_engine.get_position('.'.join([self.vt_symbol, 'Direction.LONG']))
+                    if long_position is not None:
+                        self.long_pos = long_position.volume - long_position.frozen
+                        self.write_log(u'    多仓:{}'.format(self.long_pos))
+                    else:
+                        self.long_pos = 0
                 else:
-                    self.long_pos = 0
-            else:
-                self.long_pos = 10
+                    self.long_pos = 10
+
 
         if self.entrust == 1:
             self.order_time +=1
@@ -213,6 +218,7 @@ class MacdStrategy(CtaTemplate):
         """
         Callback of new trade data update.
         """
+        self.sync_data()
         self.put_event()
 
     def on_stop_order(self, stop_order: StopOrder):

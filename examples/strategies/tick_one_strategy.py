@@ -90,7 +90,7 @@ class TickOneStrategy(CtaTemplate):
         self.write_log(u'%s策略初始化' % self.strategy_name)
         # tick级别交易，不需要过往历史数据
 
-        #self.load_tick(0)
+        self.load_tick(0)
 
     # ----------------------------------------------------------------------
     def on_start(self):
@@ -222,7 +222,12 @@ class TickOneStrategy(CtaTemplate):
         if order.offset == Offset.OPEN:
             msg = u'{}{},{}张,价:{}'.format(order.offset.value, order.direction.value, order.traded, order.price)
         else:
-            msg = u'{},{}张,价:{}'.format(order.offset.value, order.traded, order.price)
+            if order.direction == Direction.LONG:
+                dir = '空'
+            else:
+                dir = '多'
+            msg = u'{}{},{}张,价:{}'.format(order.offset.value, dir, order.traded, order.price)
+            
         self.write_log(u'    报单更新,{},{},{}'.format(order.orderid,  order.status.value, msg))
         if order.status == Status.SUBMITTING:
             self.entrust = 1
