@@ -60,7 +60,7 @@ class RSIStrategy(CtaTemplate):
 
     def on_init(self):
         """
-        Callback when strategy is inited.
+        Callback when strategy is inited.e
         """
         self.write_log("策略初始化")
         self.load_bar(30)
@@ -85,15 +85,17 @@ class RSIStrategy(CtaTemplate):
         """
         if self.downest:
             self.downest = False
-            self.buy(tick.last_price, self.input_ss)
+            if self.long_pos == 0:
+                self.buy(tick.ask_price_1, self.input_ss)
             if self.short_pos >= 1:
-                self.cover(tick.ask_price_1, self.short_pos )
+                self.cover(tick.ask_price_1, self.short_pos)
 
         elif self.uppest:
             self.uppest = False
-            self.short(tick.last_price, self.input_ss)
+            if self.short_pos == 0:
+                self.short(tick.bid_price_1, self.input_ss)
             if self.long_pos >= 1:
-                self.sell(tick.bid_price_1, self.long_pos )
+                self.sell(tick.bid_price_1, self.long_pos)
 
         self.bg.update_tick(tick)
         self.put_event()
@@ -111,8 +113,8 @@ class RSIStrategy(CtaTemplate):
         """
         Callback of new bar data update.
         """
-        self.count += 1
-        self.write_log("{}min_bar:{}".format(self.x_min_bar, self.count))
+        # self.count += 1
+        # self.write_log("{}min_bar:{}".format(self.x_min_bar, self.count))
 
         am = self.am
         am.update_bar(bar)
@@ -128,7 +130,7 @@ class RSIStrategy(CtaTemplate):
             if new_rsi_value <= self.rsi_value:
                 self.rsi_value = new_rsi_value
                 return
-            else:  #做多
+            else:  #rsi最低点第一次回头，做多
                 self.downest = True
                 self.down_count += 1
                 self.write_log(u'    RSI过低:{}'.format(new_rsi_value))
@@ -139,7 +141,13 @@ class RSIStrategy(CtaTemplate):
                         self.write_log(u'    空仓:{}'.format(self.short_pos))
                     else:
                         self.short_pos = 0
-                else:
+                    long_position = self.cta_engine.main_engine.get_position('.'.join([self.vt_symbol, 'Direction.LONG']))
+                    if long_position is not None:
+                        self.long_pos = long_position.volume - long_position.frozen
+                        self.write_log(u'    多仓:{}'.format(self.long_pos))
+                    else:
+                        self.long_pos = 0
+                else: #回测
                     self.short_pos = 10
 
 
@@ -147,18 +155,24 @@ class RSIStrategy(CtaTemplate):
             if new_rsi_value >= self.rsi_value:
                 self.rsi_value = new_rsi_value
                 return
-            else:  #做空
+            else:  #rsi最高点第一次回头，做空
                 self.uppest = True
                 self.up_count += 1
                 self.write_log(u'    RSI过高:{}'.format(new_rsi_value))
                 if self.get_engine_type() == EngineType.LIVE:
+                    short_position = self.cta_engine.main_engine.get_position('.'.join([self.vt_symbol, 'Direction.SHORT']))
+                    if short_position is not None:
+                        self.short_pos = short_position.volume - short_position.frozen
+                        self.write_log(u'    空仓:{}'.format(self.short_pos))
+                    else:
+                        self.short_pos = 0
                     long_position = self.cta_engine.main_engine.get_position('.'.join([self.vt_symbol, 'Direction.LONG']))
                     if long_position is not None:
                         self.long_pos = long_position.volume - long_position.frozen
                         self.write_log(u'    多仓:{}'.format(self.long_pos))
                     else:
                         self.long_pos = 0
-                else:
+                else: #回测
                     self.long_pos = 10
 
 
@@ -166,7 +180,7 @@ class RSIStrategy(CtaTemplate):
             self.order_time +=1
         else:
             self.order_time = 0
-        if self.order_time >=3:   # 2分钟未完成的订单， 取消
+        if self.x_min_bar == 1 and self.order_time > 2 or self.x_min_bar >1 and self.order_time >= 1:   # 2分钟未完成的订单， 取消
             self.write_log("取消超时未完成的订单")
             self.cancel_all()
             self.order_time = 0
