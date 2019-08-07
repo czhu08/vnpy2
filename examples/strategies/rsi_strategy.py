@@ -24,8 +24,8 @@ class RSIStrategy(CtaTemplate):
     rsi_length = 6
     input_ss = 1
 
-    down_line = 20
-    up_line = 80
+    down_line = 30
+    up_line = 70
 
     down_count = 0
     up_count = 0
@@ -60,7 +60,7 @@ class RSIStrategy(CtaTemplate):
 
     def on_init(self):
         """
-        Callback when strategy is inited.e
+        Callback when strategy is inited.
         """
         self.write_log("策略初始化")
         self.load_bar(30)
@@ -148,7 +148,8 @@ class RSIStrategy(CtaTemplate):
                     else:
                         self.long_pos = 0
                 else: #回测
-                    self.short_pos = 10
+                    self.buy(bar.close_price, self.input_ss)
+                    self.cover(bar.close_price, self.input_ss)
 
 
         else: # new_rsi_value >= self.up_line:
@@ -173,7 +174,8 @@ class RSIStrategy(CtaTemplate):
                     else:
                         self.long_pos = 0
                 else: #回测
-                    self.long_pos = 10
+                    self.short(bar.close_price, self.input_ss)
+                    self.sell(bar.close_price, self.input_ss)
 
 
         if self.entrust == 1:
