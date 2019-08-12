@@ -34,6 +34,7 @@ def _get_trader_dir(temp_name: str):
     """
     cwd = Path.cwd()
     if platform.system() == 'Darwin':
+        cwd = Path(__file__).parent.parent.parent
         temp_path = cwd.joinpath("examples","vn_trader",temp_name)  
     else:     
         temp_path = cwd.joinpath(temp_name)
