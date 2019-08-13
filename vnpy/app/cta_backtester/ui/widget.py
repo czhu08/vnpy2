@@ -58,30 +58,36 @@ class BacktesterManager(QtWidgets.QWidget):
         self.class_combo.addItems(self.class_names)
 
         # self.symbol_line = QtWidgets.QLineEdit("IF88.CFFEX")
-        self.symbol_line = QtWidgets.QLineEdit("ltcusdt.HUOBI")
+        self.symbol_line = QtWidgets.QLineEdit("IF0000.CZCE")
 
         self.interval_combo = QtWidgets.QComboBox()
         for inteval in Interval:
             self.interval_combo.addItem(inteval.value)
 
-        end_dt = datetime.now()
-        start_dt = end_dt - timedelta(days=3 * 20)
+        #end_dt = datetime.now()
+        #start_dt = end_dt - timedelta(days=3 * 20)
+        end_dt = datetime(2019, 8, 6)
+        start_dt = datetime(2014, 1, 2)
 
         self.start_date_edit = QtWidgets.QDateEdit(
-            QtCore.QDate(
+            QtCore.QDate (
                 start_dt.year,
                 start_dt.month,
                 start_dt.day
             )
         )
         self.end_date_edit = QtWidgets.QDateEdit(
-            QtCore.QDate.currentDate()
+            QtCore.QDate (
+                end_dt.year,
+                end_dt.month,
+                end_dt.day
+            )
         )
 
-        self.rate_line = QtWidgets.QLineEdit("0.002")
-        self.slippage_line = QtWidgets.QLineEdit("0.01")
-        self.size_line = QtWidgets.QLineEdit("1")
-        self.pricetick_line = QtWidgets.QLineEdit("0.01")
+        self.rate_line = QtWidgets.QLineEdit("0.005")
+        self.slippage_line = QtWidgets.QLineEdit("50")
+        self.size_line = QtWidgets.QLineEdit("5")
+        self.pricetick_line = QtWidgets.QLineEdit("5")
         self.capital_line = QtWidgets.QLineEdit("1000000")
         self.bt_mode = QtWidgets.QLineEdit("BAR")
 
@@ -545,6 +551,12 @@ class BacktesterChart(pg.GraphicsWindow):
         pg.setConfigOptions(antialias=True)
 
         # Create plot widgets
+        self.close_plot = self.addPlot(
+            title="收盘价格",
+            axisItems={"bottom": DateAxis(self.dates, orientation="bottom")}
+        )
+        self.nextRow()
+
         self.balance_plot = self.addPlot(
             title="账户净值",
             axisItems={"bottom": DateAxis(self.dates, orientation="bottom")}
@@ -566,6 +578,10 @@ class BacktesterChart(pg.GraphicsWindow):
         self.distribution_plot = self.addPlot(title="盈亏分布")
 
         # Add curves and bars on plot widgets
+        self.close_curve = self.close_plot.plot(
+            pen=pg.mkPen("#afd0a7", width=3)
+        )
+
         self.balance_curve = self.balance_plot.plot(
             pen=pg.mkPen("#ffc107", width=3)
         )
@@ -593,6 +609,7 @@ class BacktesterChart(pg.GraphicsWindow):
 
     def clear_data(self):
         """"""
+        self.close_curve.setData([], [])
         self.balance_curve.setData([], [])
         self.drawdown_curve.setData([], [])
         self.profit_pnl_bar.setOpts(x=[], height=[])
@@ -611,6 +628,7 @@ class BacktesterChart(pg.GraphicsWindow):
             self.dates[n] = date
 
         # Set data for curve of balance and drawdown
+        self.close_curve.setData(df["close_price"])
         self.balance_curve.setData(df["balance"])
         self.drawdown_curve.setData(df["drawdown"])
 

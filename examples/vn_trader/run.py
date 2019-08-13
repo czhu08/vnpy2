@@ -25,7 +25,7 @@ from vnpy.gateway.hbdm import HbdmGateway
 # from vnpy.gateway.alpaca import AlpacaGateway
 
 from vnpy.app.cta_strategy import CtaStrategyApp
-# from vnpy.app.csv_loader import CsvLoaderApp
+from vnpy.app.csv_loader import CsvLoaderApp
 # from vnpy.app.algo_trading import AlgoTradingApp
 from vnpy.app.cta_backtester import CtaBacktesterApp
 # from vnpy.app.data_recorder import DataRecorderApp
@@ -64,7 +64,7 @@ def main():
 
     main_engine.add_app(CtaStrategyApp)
     main_engine.add_app(CtaBacktesterApp)
-    # main_engine.add_app(CsvLoaderApp)
+    main_engine.add_app(CsvLoaderApp)
     # main_engine.add_app(AlgoTradingApp)
     # main_engine.add_app(DataRecorderApp)
     # main_engine.add_app(RiskManagerApp)

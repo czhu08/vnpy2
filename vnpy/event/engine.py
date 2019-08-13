@@ -7,6 +7,7 @@ from queue import Empty, Queue
 from threading import Thread
 from time import sleep
 from typing import Any, Callable
+from concurrent.futures import ThreadPoolExecutor
 
 EVENT_TIMER = "eTimer"
 
@@ -48,7 +49,7 @@ class EventEngine:
         self._thread = Thread(target=self._run)
         self._timer = Thread(target=self._run_timer)
         self._handlers = defaultdict(list)
-        self._general_handlers = []
+        self._general_handlers = []        
 
     def _run(self):
         """
@@ -70,10 +71,17 @@ class EventEngine:
         to all types.
         """
         if event.type in self._handlers:
-            [handler(event) for handler in self._handlers[event.type]]
+            [self._dispatch_event(handler, event) for handler in self._handlers[event.type]]
 
         if self._general_handlers:
-            [handler(event) for handler in self._general_handlers]
+            [self._dispatch_event(handler, event) for handler in self._general_handlers]
+
+    def _dispatch_event(self, handler: HandlerType, event: Event):
+        '''
+        TODO:使用线程池执行事件能够提高系统并发能力，减少事件排队带来的延迟
+        self._executor.submit(handler, event)
+        '''
+        handler(event)
 
     def _run_timer(self):
         """
@@ -89,6 +97,7 @@ class EventEngine:
         Start event engine to process events and generate timer events.
         """
         self._active = True
+        self._executor = ThreadPoolExecutor()
         self._thread.start()
         self._timer.start()
 
@@ -99,6 +108,7 @@ class EventEngine:
         self._active = False
         self._timer.join()
         self._thread.join()
+        self._executor.shutdown()
 
     def put(self, event: Event):
         """

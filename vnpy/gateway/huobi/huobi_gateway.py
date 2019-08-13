@@ -78,6 +78,7 @@ class HuobiGateway(BaseGateway):
         "会话数": 3,
         "代理地址": "",
         "代理端口": "",
+        "行情代码": ""
     }
 
     exchanges = [Exchange.HUOBI]
@@ -91,6 +92,7 @@ class HuobiGateway(BaseGateway):
         self.rest_api = HuobiRestApi(self)
         self.trade_ws_api = HuobiTradeWebsocketApi(self)
         self.market_ws_api = HuobiDataWebsocketApi(self)
+        self._timer_count = 0
 
     def connect(self, setting: dict):
         """"""
@@ -108,6 +110,8 @@ class HuobiGateway(BaseGateway):
         self.rest_api.connect(key, secret, session_number,
                               proxy_host, proxy_port)
         self.trade_ws_api.connect(key, secret, proxy_host, proxy_port)
+
+        self.market_ws_api.default_subscribe_symbol = setting["行情代码"]
         self.market_ws_api.connect(key, secret, proxy_host, proxy_port)
 
         self.init_query()
@@ -145,15 +149,14 @@ class HuobiGateway(BaseGateway):
 
     def process_timer_event(self, event: Event):
         """"""
-        self.count += 1
-        if self.count < 3:
-            return
-
-        self.query_account()
+        self._timer_count += 1
+        if self._timer_count >= 3:
+            self._timer_count = 0
+            self.query_account()
 
     def init_query(self):
         """"""
-        self.count = 0
+        self._timer_count = 0
         self.event_engine.register(EVENT_TIMER, self.process_timer_event)
 
 
@@ -675,6 +678,7 @@ class HuobiTradeWebsocketApi(HuobiWebsocketApiBase):
 
 class HuobiDataWebsocketApi(HuobiWebsocketApiBase):
     """"""
+    default_subscribe_symbol = ''
 
     def __init__(self, gateway):
         """"""
@@ -690,10 +694,16 @@ class HuobiDataWebsocketApi(HuobiWebsocketApiBase):
     def on_connected(self):
         """"""
         self.gateway.write_log("行情Websocket API连接成功")
+        if self.default_subscribe_symbol:
+            self.gateway.write_log(f"订阅行情{self.default_subscribe_symbol}")
+            self._subscribe(self.default_subscribe_symbol)
         
     def subscribe(self, req: SubscribeRequest):
+        self._subscribe(req.symbol)
+
+    def _subscribe(self, req_symbol: str):
         """"""
-        symbol = req.symbol
+        symbol = req_symbol
 
         # Create tick data buffer
         tick = TickData(
