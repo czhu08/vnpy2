@@ -76,6 +76,11 @@ class MarketMakerStrategy(CtaTemplate):
 
     # ----------------------------------------------------------------------
     def on_tick(self, tick: TickData):
+
+        # 首先检查是否是实盘运行还是数据预处理阶段
+        if not self.inited or not self.trading:
+            return
+
         if self.entrust != 0:
             return
 
@@ -116,14 +121,14 @@ class MarketMakerStrategy(CtaTemplate):
 
         if order.status == Status.SUBMITTING:
             self.entrust = 1
-        if order.status == Status.NOTTRADED:
+        elif order.status in [Status.NOTTRADED, Status.PARTTRADED]:
             # if order.offset == Offset.OPEN:
             #     sleep(20)
             #     self.write_log("取消开单")
             #     self.cancel_all()
             #     self.entrust = 0
             pass
-        if order.status in [Status.ALLTRADED]:
+        elif order.status == Status.ALLTRADED:
             if order.direction == Direction.LONG:
                 self.poss += self.input_ss
             elif order.direction == Direction.SHORT:
@@ -131,23 +136,25 @@ class MarketMakerStrategy(CtaTemplate):
 
             self.entrust = 0
             # sendWxMsg(order.symbol + msg, '')
-        elif order.status in [Status.CANCELLED, Status.REJECTED]:
-            if order.offset == Offset.CLOSE:  # 平仓单异常
-                self.write_log("取消多余的平仓单")
-                self.cancel_all()
-
-            sleep(10)  # 10s
+        elif order.status == Status.CANCELLED:
+            self.write_log(f'\t报单更新,{order.orderid},{order.status.value}')
             self.entrust = 0
+            self.poss = 0
+            sleep(10)  # 10s
+        elif order.status == Status.REJECTED:
+            self.write_log(f'\t报单更新,{order.orderid},{order.status.value}')
+            # if order.offset == Offset.CLOSE:  # 平仓单异常
+            #     self.write_log("取消多余的平仓单")
+            #     self.cancel_all()
+            sleep(10)  # 10s
         else:
-            # self.write_log(f'\t报单更新,{order.orderid},{order.status.value}')
+            self.write_log(f'\t报单更新,{order.orderid},{order.status.value}')
             pass
 
         self.put_event()
 
     def on_trade(self, trade: TradeData):
         # 同步数据到数据库
-        self.posPrice = trade.price
-        self.sync_data()
         if self.entrust == 0:
             msg = u'{}{},{}张,成交价:{}'.format(trade.offset.value, trade.direction.value, trade.volume, trade.price)
             self.write_log(f'交易完成,{trade.orderid},{msg}')

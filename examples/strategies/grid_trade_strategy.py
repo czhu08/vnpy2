@@ -9,7 +9,7 @@ from vnpy.app.cta_strategy import (
     StopOrder
 )
 from vnpy.app.cta_strategy.base import EngineType
-from vnpy.trader.constant import Status, Direction
+from vnpy.trader.constant import Status, Direction, Offset
 from vnpy.trader.object import BarData
 from vnpy.trader.utility import round_to
 
@@ -103,6 +103,9 @@ class GridTradeStrategy(CtaTemplate):
         if not self.inited or not self.trading:
             return
 
+        if self.entrust != 0:
+            return
+
         if tick.last_price > self.grid_up_line:
             if self.__singleton1:
                 if self.get_engine_type() == EngineType.LIVE:
@@ -134,12 +137,6 @@ class GridTradeStrategy(CtaTemplate):
                             sendWxMsg(u'清仓委托卖出成功', u'委托编号:{},委托价格:{},卖出数量{}'.format(ref, price, sell_volume))
                     else:
                         self.write_log(u'清仓委托卖出{}失败,价格:{},数量:{}'.format(self.vt_symbol, price, sell_volume))
-            return
-
-        if self.entrust != 0:
-            # if (self.__singleton2):
-            #     sendWxMsg(u'委托单未全部成交',u'单号:{}'.format(ref))
-            #     self.__singleton2 = False
             return
 
         price= tick.last_price
@@ -196,8 +193,7 @@ class GridTradeStrategy(CtaTemplate):
         """
         Callback of new order data update.
         """
-        msg = u'    报单更新,{},{},{},价:{},成交:{},{}'.format(order.orderid, order.symbol,
-                                 order.offset.value, order.price, order.traded, order.status.value)
+        msg = f'\t报单更新,{order.orderid},{order.symbol},{order.offset.value},价:{order.price},委托:{order.volume},{order.status.value}'
         self.write_log(msg)
 
         if order.volume == order.traded or order.status == Status.ALLTRADED:
@@ -230,7 +226,10 @@ class GridTradeStrategy(CtaTemplate):
                 sendWxMsg(sub, msg2)
 
         elif order.status in [Status.CANCELLED,Status.REJECTED]:
-            sleep(10)  #10s
+            self.write_log("取消多余的单")
+            self.cancel_all()
+
+            sleep(10)  # 10s
             self.entrust = 0
 
         self.put_event()
@@ -241,10 +240,4 @@ class GridTradeStrategy(CtaTemplate):
         """
         # self.write_log(u'交易完成')
         # self.put_event()
-        pass
-
-    def on_stop_order(self, stop_order: StopOrder):
-        """
-        Callback of stop order update.
-        """
         pass
