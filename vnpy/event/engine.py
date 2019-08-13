@@ -78,9 +78,10 @@ class EventEngine:
 
     def _dispatch_event(self, handler: HandlerType, event: Event):
         '''
-        使用线程池执行事件能够提高系统并发能力，减少事件排队带来的延迟
-        '''
+        TODO:使用线程池执行事件能够提高系统并发能力，减少事件排队带来的延迟
         self._executor.submit(handler, event)
+        '''
+        handler(event)
 
     def _run_timer(self):
         """
