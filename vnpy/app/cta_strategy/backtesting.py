@@ -273,6 +273,8 @@ class BacktestingEngine:
         ix = 0
         
         for ix, data in enumerate(self.history_data):
+            if self.days == 0:
+                break
             if self.datetime and data.datetime.day != self.datetime.day:
                 day_count += 1
                 if day_count >= self.days:
