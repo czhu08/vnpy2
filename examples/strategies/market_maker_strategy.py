@@ -1,18 +1,14 @@
 from time import sleep
-
 import numpy as np
+from vnpy.trader.utility import round_to, BarGenerator
 
-from datetime import datetime, time
-from vnpy.trader.utility import round_to
-
-from examples.util.util_wx_ft import sendWxMsg
+# from examples.util.util_wx_ft import sendWxMsg
 from vnpy.app.cta_strategy import (
     CtaTemplate,
     TickData,
     TradeData,
     BarData,
     OrderData,
-    StopOrder,
 )
 from vnpy.trader.constant import Status, Direction, Offset
 
@@ -22,6 +18,7 @@ from vnpy.trader.constant import Status, Direction, Offset
 入场： 每次读 Tick ，分析过去 30 个 tick 的的总计，如果买量大于卖量，开多单 ；反之空单
 买(卖)一价现价单开多(空)和卖(买)一价平多(空)仓来做市, 并以此赚取差价
 '''
+
 
 #  LTC190927.HUOBI
 ########################################################################
@@ -51,6 +48,8 @@ class MarketMakerStrategy(CtaTemplate):
             cta_engine, strategy_name, vt_symbol, setting
         )
 
+        self.bg = BarGenerator(self.on_bar)
+
         # 创建Array队列
         self.tickArray = TickArrayManager(self.tickSize)
 
@@ -59,6 +58,8 @@ class MarketMakerStrategy(CtaTemplate):
 
         self.ask_price = 0
         self.bid_price = 0
+
+        self.order_time = 0
 
     def on_init(self):
         self.write_log(u'%s策略初始化' % self.strategy_name)
@@ -81,32 +82,48 @@ class MarketMakerStrategy(CtaTemplate):
         if not self.inited or not self.trading:
             return
 
+        self.bg.update_tick(tick)
+
         if self.entrust != 0:
             return
 
         if self.poss == 0:
-            TA = self.tickArray
-            TA.updateTick(tick)
-            if not TA.inited:
+            ta = self.tickArray
+            ta.update_tick(tick)
+            if not ta.inited:
                 return
 
             # 如果空仓，分析过去30个对比，ask卖方多下空单，bid买方多下多单
-            if TA.askBidVolumeDif() > 0:
+            if ta.askbidvolumedif() > 0:
                 price = tick.ask_price_2
                 self.bid_price = tick.bid_price_2
                 ref = self.short(price, self.input_ss, False)
-                self.write_log(u'开空单{},价:{}'.format(ref, price))
+                self.write_log(u'开空单{},价:{}'.format(ref[-5:-3], price))
 
-            elif TA.askBidVolumeDif() <= 0:
+            elif ta.askbidvolumedif() <= 0:
                 price = tick.bid_price_2
                 self.ask_price = tick.ask_price_2
                 ref = self.buy(price, self.input_ss, False)
-                self.write_log(u'开多单{},价:{}'.format(ref, price))
+                self.write_log(u'开多单{},价:{}'.format(ref[-5:-3], price))
 
             self.entrust = 1
 
             # re-init TA
-            TA.re_init()
+            ta.re_init()
+
+    def on_bar(self, bar: BarData):
+        if self.entrust == 1 and self.poss == 0:
+            self.order_time += 1
+            if self.order_time > 2:  # 2分钟未完成的订单， 取消
+                self.write_log("\t取消超时未完成的开仓单")
+                self.cancel_all()
+                sleep(10)
+                self.order_time = 0
+                self.entrust = 0
+        else:
+            self.order_time = 0
+
+        self.put_event()
 
     def on_order(self, order: OrderData):
         # if order.offset == Offset.OPEN:
@@ -137,18 +154,18 @@ class MarketMakerStrategy(CtaTemplate):
             self.entrust = 0
             # sendWxMsg(order.symbol + msg, '')
         elif order.status == Status.CANCELLED:
-            self.write_log(f'\t报单更新,{order.orderid},{order.status.value}')
+            self.write_log(f'\t报单更新,{order.orderid[-3:]},{order.status.value}')
             self.entrust = 0
             self.poss = 0
             sleep(10)  # 10s
         elif order.status == Status.REJECTED:
-            self.write_log(f'\t报单更新,{order.orderid},{order.status.value}')
+            self.write_log(f'\t报单更新,{order.orderid[-3:]},{order.status.value}')
             # if order.offset == Offset.CLOSE:  # 平仓单异常
             #     self.write_log("取消多余的平仓单")
             #     self.cancel_all()
             sleep(10)  # 10s
         else:
-            self.write_log(f'\t报单更新,{order.orderid},{order.status.value}')
+            self.write_log(f'\t报单更新,{order.orderid[-3:]},{order.status.value}')
             pass
 
         self.put_event()
@@ -156,21 +173,27 @@ class MarketMakerStrategy(CtaTemplate):
     def on_trade(self, trade: TradeData):
         # 同步数据到数据库
         if self.entrust == 0:
-            msg = u'{}{},{}张,成交价:{}'.format(trade.offset.value, trade.direction.value, trade.volume, trade.price)
-            self.write_log(f'交易完成,{trade.orderid},{msg}')
-
             if trade.offset == Offset.OPEN:
+                msg = f'{trade.offset.value}{trade.direction.value},{trade.volume}张,成交价:{trade.price}'
                 self.entrust = 1
+                self.write_log(f'交易完成,{trade.orderid[-3:]},{msg}')
                 if trade.direction == Direction.LONG:
                     price = self.ask_price
                     price = round_to(price, self.min_diff)
                     ref = self.sell(price, self.input_ss, False)
-                    self.write_log(u'平多单{},价:{}'.format(ref, price))
+                    self.write_log(u'平多单{},价:{}'.format(ref[-5:-3], price))
                 elif trade.direction == Direction.SHORT:
                     price = self.bid_price
                     price = round_to(price, self.min_diff)
                     ref = self.cover(price, self.input_ss, False)
-                    self.write_log(u'平空单{},价:{}'.format(ref, price))
+                    self.write_log(u'平空单{},价:{}'.format(ref[-5:-3], price))
+            else:
+                if trade.direction == Direction.LONG:
+                    direc = '空'
+                else:
+                    direc = '多'
+                msg = f'{trade.offset.value}{direc},{trade.volume}张,成交价:{trade.price}'
+                self.write_log(f'交易完成,{trade.orderid[-3:]},{msg}')
 
         self.put_event()
 
@@ -201,7 +224,7 @@ class TickArrayManager(object):
         self.count = 0
         self.inited = False
 
-    def updateTick(self, tick):
+    def update_tick(self, tick):
         """更新tick Array"""
         self.count += 1
         if not self.inited and self.count >= self.size:
@@ -223,5 +246,5 @@ class TickArrayManager(object):
         self.TickopenInterestArray[-1] = tick.open_interest
         self.TickvolumeArray[-1] = tick.volume
 
-    def askBidVolumeDif(self):
+    def askbidvolumedif(self):
         return self.TickaskVolume1Array.sum() - self.TickbidVolume1Array.sum()

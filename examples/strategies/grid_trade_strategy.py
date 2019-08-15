@@ -121,7 +121,10 @@ class GridTradeStrategy(CtaTemplate):
                 self.__singleton2 = False
                 if self.get_engine_type() == EngineType.LIVE:
                     base_pos = self.cta_engine.main_engine.get_account('.'.join([tick.exchange.value, self.base]))
-                    sell_volume = base_pos.balance
+                    if base_pos is not None:
+                        sell_volume = base_pos.balance
+                    else:
+                        sell_volume = 0
                 else:
                     sell_volume = 50
 
@@ -145,7 +148,11 @@ class GridTradeStrategy(CtaTemplate):
             # 买入,开多
             if self.get_engine_type() == EngineType.LIVE:
                 account = self.cta_engine.main_engine.get_account('.'.join([tick.exchange.value, self.quote]))
-                buy = account.balance
+                if account is not None:
+                    buy = account.balance
+                else:
+                    buy = 0
+
             else:
                 buy = 1000
             price = tick.ask_price_1  #卖一价
@@ -166,7 +173,10 @@ class GridTradeStrategy(CtaTemplate):
             # 卖出，平多
             if self.get_engine_type() == EngineType.LIVE:
                 base_pos = self.cta_engine.main_engine.get_account('.'.join([tick.exchange.value, self.base]))
-                sell_volume1 = base_pos.balance
+                if base_pos is not None:
+                    sell_volume1 = base_pos.balance
+                else:
+                    sell_volume1 = 0
             else:
                 sell_volume1 = 10
 
