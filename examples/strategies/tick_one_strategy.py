@@ -127,14 +127,14 @@ class TickOneStrategy(CtaTemplate):
 
             # 如果空仓，分析过去10个对比，ask卖方多下空单，bid买方多下多单，并放两个差价阻止单
             if TA.askBidVolumeDif() > 0:
-                price = tick.bid_price_5
+                price = tick.bid_price_1
                 ref = self.short(price, self.input_ss, False)
                 self.write_log(u'开空单{},价:{}'.format(ref, price))
                 #ref = self.cover(price + self.step, self.input_ss, True)
                 #self.write_log(u'平空停止单{}'.format(ref))
                 self.entrust = 1
             elif TA.askBidVolumeDif() <= 0:
-                price = tick.ask_price_5
+                price = tick.ask_price_1
                 ref = self.buy(price, self.input_ss, False)
                 self.write_log(u'开多单{},价:{}'.format(ref, price))
                 #ref = self.sell(price - self.step, self.input_ss, True)

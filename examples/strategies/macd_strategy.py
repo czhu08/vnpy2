@@ -40,7 +40,7 @@ class MacdStrategy(CtaTemplate):
         else:
             self.bg = BarGenerator(self.on_bar, self.x_min_bar, self.on_window_bar)
 
-        self.am = ArrayManager(40)
+        self.am = ArrayManager(40)   # must > 40
 
         self.min_range = 0.01  # 1m 经验值
 

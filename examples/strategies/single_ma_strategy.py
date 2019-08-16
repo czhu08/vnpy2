@@ -47,6 +47,9 @@ class SingleMAStrategy(CtaTemplate):
         self.ma_value = 0
         self.ma_inited = False
 
+        self.long_price = 0
+        self.short_price = 0
+
         self.count = 0
         self.short_pos = 0
         self.long_pos = 0
@@ -57,7 +60,7 @@ class SingleMAStrategy(CtaTemplate):
         self.downest = False
 
         self.order_time = 0
-        self.entrust = 0  # 0 表示没有委托，1 表示存在开仓的委托，
+        self.entrust = 0  # 0 表示没有委托，1 表示存在开仓的委托
         self.entrust2 = 0  # -1 表示存在平仓的委托
 
     def on_init(self):
@@ -87,15 +90,21 @@ class SingleMAStrategy(CtaTemplate):
         """
         if self.downest:
             self.downest = False
-            if self.short_pos >= 1:
-                self.cover(tick.ask_price_1, self.short_pos)
+            if self.short_price != 0:
+                if tick.ask_price_1 >= self.short_price:
+                    self.write_log(f"跳过这个低点")
+                elif self.short_pos >= 1:
+                    self.cover(tick.ask_price_1, self.short_pos)
             if self.long_pos == 0:
                 self.buy(tick.ask_price_1, self.input_ss)
 
         elif self.uppest:
             self.uppest = False
-            if self.long_pos >= 1:
-                self.sell(tick.bid_price_1, self.long_pos)
+            if self.long_price != 0:
+                if tick.bid_price_1 <= self.long_price:
+                    self.write_log(f"跳过这个高点")
+                elif self.long_pos >= 1:
+                    self.sell(tick.bid_price_1, self.long_pos)
             if self.short_pos == 0:
                 self.short(tick.bid_price_1, self.input_ss)
 
@@ -255,20 +264,25 @@ class SingleMAStrategy(CtaTemplate):
         """
         Callback of new trade data update.
         """
-        self.sync_data()
-
-        if self.entrust == 0 and trade.offset == Offset.OPEN or self.entrust2 == 0 and trade.offset == Offset.CLOSE:
-            if trade.offset == Offset.OPEN:
-                msg = f'{trade.offset.value}{trade.direction.value},{trade.volume}张,成交价:{trade.price}'
-                self.write_log(f'交易完成,{trade.orderid},{msg}')
+        if self.entrust == 0 and trade.offset == Offset.OPEN:
+            if trade.direction == Direction.LONG:
+                self.long_price = trade.price
             else:
-                if trade.direction == Direction.LONG:
-                    direc = '空'
-                else:
-                    direc = '多'
-                msg = f'{trade.offset.value}{direc},{trade.volume}张,成交价:{trade.price}'
-                self.write_log(f'\t交易完成,{trade.orderid},{msg}')
+                self.short_price = trade.price
 
+            msg = f'{trade.offset.value}{trade.direction.value},{trade.volume}张,成交价:{trade.price}'
+            self.write_log(f'交易完成,{trade.orderid},{msg}')
+            if self.get_engine_type() == EngineType.LIVE:
+                sendWxMsg(trade.symbol + msg, '')
+
+        if self.entrust2 == 0 and trade.offset == Offset.CLOSE:
+            if trade.direction == Direction.LONG:
+                direc = '空'
+            else:
+                direc = '多'
+
+            msg = f'{trade.offset.value}{direc},{trade.volume}张,成交价:{trade.price}'
+            self.write_log(f'\t交易完成,{trade.orderid},{msg}')
             if self.get_engine_type() == EngineType.LIVE:
                 sendWxMsg(trade.symbol + msg, '')
 
