@@ -21,14 +21,17 @@ class SingleMAStrategy(CtaTemplate):
     author = "czhu"
 
     x_min_bar = 1  # 几分钟bar, 必须能被60整除
-    ma_window = 5
+    # ma_window = 5
     input_ss = 2
+
+    long_price = 0
+    short_price = 0
 
     down_count = 0
     up_count = 0
 
-    parameters = ["x_min_bar", "ma_window", "input_ss"]
-    variables = ["down_count", "up_count"]
+    parameters = ["x_min_bar",  "input_ss"]   # "ma_window"
+    variables = ["long_price", "short_price", "down_count", "up_count"]
 
     def __init__(self, cta_engine, strategy_name, vt_symbol, setting):
         """"""
@@ -43,18 +46,14 @@ class SingleMAStrategy(CtaTemplate):
 
         self.am = ArrayManager(40)
 
-        self.min_range = 0.01  # 1m 经验值
+        self.min_diff = 0.001  # 1m 经验值
         self.ma_value = 0
         self.ma_inited = False
-
-        self.long_price = 0
-        self.short_price = 0
 
         self.count = 0
         self.short_pos = 0
         self.long_pos = 0
 
-        self.is_down = False
         self.is_up = False
         self.uppest = False
         self.downest = False
@@ -90,23 +89,47 @@ class SingleMAStrategy(CtaTemplate):
         """
         if self.downest:
             self.downest = False
+            price = min(tick.last_price + self.min_diff * 4, tick.ask_price_1)
             if self.short_price != 0:
-                if tick.ask_price_1 >= self.short_price:
-                    self.write_log(f"跳过这个低点")
-                elif self.short_pos >= 1:
-                    self.cover(tick.ask_price_1, self.short_pos)
+                #if price >= self.short_price and price < self.short_price * 1.02:
+                if price >= self.short_price:
+                    self.write_log(f"\t跳过这个低点")
+                else:
+                    if self.get_engine_type() == EngineType.LIVE:
+                        short_position = self.cta_engine.main_engine.get_position(
+                            '.'.join([self.vt_symbol, 'Direction.SHORT']))
+                        if short_position is not None:
+                            self.short_pos = short_position.volume - short_position.frozen
+                            self.write_log(u'\t空仓:{}'.format(self.short_pos))
+                        else:
+                            self.short_pos = 0
+
+                    if self.short_pos >= 1:
+                        self.cover(price, self.short_pos)
             if self.long_pos == 0:
-                self.buy(tick.ask_price_1, self.input_ss)
+                self.buy(price, self.input_ss)
 
         elif self.uppest:
             self.uppest = False
+            price = max(tick.last_price - self.min_diff * 4, tick.bid_price_1)
             if self.long_price != 0:
-                if tick.bid_price_1 <= self.long_price:
-                    self.write_log(f"跳过这个高点")
-                elif self.long_pos >= 1:
-                    self.sell(tick.bid_price_1, self.long_pos)
+                #if price <= self.long_price and price > self.long_price * 0.98:
+                if price <= self.long_price:
+                    self.write_log(f"\t跳过这个高点")
+                else:
+                    if self.get_engine_type() == EngineType.LIVE:
+                        long_position = self.cta_engine.main_engine.get_position(
+                            '.'.join([self.vt_symbol, 'Direction.LONG']))
+                        if long_position is not None:
+                            self.long_pos = long_position.volume - long_position.frozen
+                            self.write_log(u'\t多仓:{}'.format(self.long_pos))
+                        else:
+                            self.long_pos = 0
+
+                    if self.long_pos >= 1:
+                        self.sell(price, self.long_pos)
             if self.short_pos == 0:
-                self.short(tick.bid_price_1, self.input_ss)
+                self.short(price, self.input_ss)
 
         self.bg.update_tick(tick)
         self.put_event()
@@ -134,68 +157,39 @@ class SingleMAStrategy(CtaTemplate):
             return
 
         if not self.ma_inited:
+            self.ma_inited = True
             # ma = am.sma(self.ma_window, True)
             ma, macdsignal, macdhist = am.macd(12, 26, 9, array=True)
-
             if ma[-1] >= ma[-2]:
                 self.is_up = True
             else:
-                self.is_down = True
+                self.is_up = False
 
-            self.ma_inited = True
             self.ma_value = ma[-1]
-            self.write_log(f"初始化完成，up:{self.is_up},down:{self.is_down}, dif:{ma[-1]}")
+            self.write_log(f"初始化完成，up:{self.is_up}")
             return
 
         # new_ma_value = am.sma(self.ma_window, False)
         new_ma_value, macdsignal, macdhist = am.macd(12, 26, 9, array=False)
         # self.write_log(f"dif:{new_ma_value}")
 
-        if self.is_up and new_ma_value >= self.ma_value or self.is_down and new_ma_value <= self.ma_value:
+        if self.is_up and new_ma_value >= self.ma_value or not self.is_up and new_ma_value <= self.ma_value:
             self.ma_value = new_ma_value
             return
 
         elif self.is_up and new_ma_value < self.ma_value:  # ma最高点第一次回头，做空
             self.ma_value = new_ma_value
             self.is_up = False
-            self.is_down = True
             self.uppest = True
             self.up_count += 1
-            self.write_log(f'\t最高点:{self.up_count},dif:{new_ma_value}')
-            if self.get_engine_type() == EngineType.LIVE:
-                short_position = self.cta_engine.main_engine.get_position('.'.join([self.vt_symbol, 'Direction.SHORT']))
-                if short_position is not None:
-                    self.short_pos = short_position.volume - short_position.frozen
-                    self.write_log(u'\t空仓:{}'.format(self.short_pos))
-                else:
-                    self.short_pos = 0
-                long_position = self.cta_engine.main_engine.get_position('.'.join([self.vt_symbol, 'Direction.LONG']))
-                if long_position is not None:
-                    self.long_pos = long_position.volume - long_position.frozen
-                    self.write_log(u'\t多仓:{}'.format(self.long_pos))
-                else:
-                    self.long_pos = 0
+            self.write_log(f'\t高点:{self.up_count}')
 
-        elif self.is_down and new_ma_value > self.ma_value:  # ma最低点第一次回头，做多
+        elif not self.is_up and new_ma_value > self.ma_value:  # ma最低点第一次回头，做多
             self.ma_value = new_ma_value
             self.is_up = True
-            self.is_down = False
             self.downest = True
             self.down_count += 1
-            self.write_log(f'\t最低点:{self.down_count},dif:{new_ma_value}')
-            if self.get_engine_type() == EngineType.LIVE:
-                short_position = self.cta_engine.main_engine.get_position('.'.join([self.vt_symbol, 'Direction.SHORT']))
-                if short_position is not None:
-                    self.short_pos = short_position.volume - short_position.frozen
-                    self.write_log(u'\t空仓:{}'.format(self.short_pos))
-                else:
-                    self.short_pos = 0
-                long_position = self.cta_engine.main_engine.get_position('.'.join([self.vt_symbol, 'Direction.LONG']))
-                if long_position is not None:
-                    self.long_pos = long_position.volume - long_position.frozen
-                    self.write_log(u'\t多仓:{}'.format(self.long_pos))
-                else:
-                    self.long_pos = 0
+            self.write_log(f'\t低点:{self.down_count}')
 
         if self.entrust == 1:
             self.order_time += 1
@@ -204,7 +198,9 @@ class SingleMAStrategy(CtaTemplate):
         if self.x_min_bar == 1 and self.order_time > 2 or self.x_min_bar > 1 and self.order_time >= 2:   # 2分钟未完成的订单， 取消
             self.write_log("取消超时未完成的开仓单")
             self.cancel_all()
+            sleep(10)
             self.order_time = 0
+            self.entrust = 0
 
         self.put_event()
 
@@ -216,7 +212,6 @@ class SingleMAStrategy(CtaTemplate):
             if order.offset == Offset.OPEN:
                 self.entrust = 1
                 msg = u'{}{},{}张,价:{}'.format(order.offset.value, order.direction.value, order.volume, order.price)
-                self.write_log(f'{order.status.value}{order.orderid},{msg}')
             else:
                 self.entrust2 = -1
                 if order.direction == Direction.LONG:
@@ -224,13 +219,9 @@ class SingleMAStrategy(CtaTemplate):
                 else:
                     direc = '多'
                 msg = u'{}{},{}张,价:{}'.format(order.offset.value, direc, order.volume, order.price)
-                self.write_log(f'\t{order.status.value}{order.orderid},{msg}')
+
+            self.write_log(f'{order.status.value},{order.orderid},{msg}')
         elif order.status in [Status.NOTTRADED, Status.PARTTRADED]:
-            # if order.offset == Offset.OPEN:
-            #     sleep(20)
-            #     self.write_log("取消开单")
-            #     self.cancel_all()
-            #     self.entrust = 0
             pass
         elif order.status == Status.ALLTRADED:
             if order.offset == Offset.OPEN:
@@ -238,24 +229,23 @@ class SingleMAStrategy(CtaTemplate):
             else:
                 self.entrust2 = 0
         elif order.status == Status.CANCELLED:
-            self.write_log(f'\t报单更新,{order.orderid},{order.status.value}')
+            self.write_log(f'报单更新,{order.orderid},{order.status.value}')
             if order.offset == Offset.OPEN:
                 self.entrust = 0
             else:
                 self.entrust2 = 0
             sleep(10)  # 10s
         elif order.status == Status.REJECTED:
-            self.write_log(f'\t报单更新,{order.orderid},{order.status.value}')
-            if order.offset == Offset.CLOSE:  # 平仓单异常
-                self.write_log("取消多余的平仓单")
-                self.cancel_all()
+            self.write_log(f'报单更新,{order.orderid},{order.status.value}')
             if order.offset == Offset.OPEN:
                 self.entrust = 0
             else:
                 self.entrust2 = 0
+                self.write_log("取消多余的平仓单")
+                self.cancel_all()
             sleep(10)  # 10s
         else:
-            self.write_log(f'\t报单更新,{order.orderid},{order.status.value}')
+            self.write_log(f'报单更新,{order.orderid},{order.status.value}')
             pass
 
         self.put_event()
